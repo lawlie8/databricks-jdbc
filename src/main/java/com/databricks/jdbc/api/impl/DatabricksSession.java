@@ -1,5 +1,6 @@
 package com.databricks.jdbc.api.impl;
 
+import static com.databricks.jdbc.common.DatabricksJdbcConstants.INVALID_SESSION_STATE_MSG;
 import static com.databricks.jdbc.common.DatabricksJdbcConstants.REDACTED_TOKEN;
 
 import com.databricks.jdbc.api.internal.IDatabricksConnectionContext;
@@ -156,9 +157,21 @@ public class DatabricksSession implements IDatabricksSession {
     LOGGER.debug("public void close()");
     synchronized (this) {
       if (isSessionOpen) {
-        databricksClient.deleteSession(sessionInfo);
-        this.sessionInfo = null;
-        this.isSessionOpen = false;
+        try {
+          databricksClient.deleteSession(sessionInfo);
+        } catch (DatabricksSQLException e) {
+          if (e.getMessage() != null && e.getMessage().contains(INVALID_SESSION_STATE_MSG)) {
+            LOGGER.info(
+                "Session [{}] already expired/invalid on server – ignoring during close()",
+                sessionInfo.sessionId());
+          } else {
+            throw e;
+          }
+        } finally {
+          // Always clean up local state
+          this.sessionInfo = null;
+          this.isSessionOpen = false;
+        }
       }
     }
   }
