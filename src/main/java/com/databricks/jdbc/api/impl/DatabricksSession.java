@@ -16,6 +16,7 @@ import com.databricks.jdbc.dbclient.impl.sqlexec.DatabricksEmptyMetadataClient;
 import com.databricks.jdbc.dbclient.impl.sqlexec.DatabricksMetadataSdkClient;
 import com.databricks.jdbc.dbclient.impl.sqlexec.DatabricksSdkClient;
 import com.databricks.jdbc.dbclient.impl.thrift.DatabricksThriftServiceClient;
+import com.databricks.jdbc.exception.DatabricksHttpException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.exception.DatabricksTemporaryRedirectException;
 import com.databricks.jdbc.log.JdbcLogger;
@@ -159,9 +160,10 @@ public class DatabricksSession implements IDatabricksSession {
       if (isSessionOpen) {
         try {
           databricksClient.deleteSession(sessionInfo);
-        } catch (DatabricksSQLException e) {
-          if (e.getMessage() != null && e.getMessage().contains(INVALID_SESSION_STATE_MSG)) {
-            LOGGER.info(
+        } catch (DatabricksHttpException e) {
+          if (e.getMessage() != null
+              && e.getMessage().toLowerCase().contains(INVALID_SESSION_STATE_MSG)) {
+            LOGGER.warn(
                 "Session [{}] already expired/invalid on server – ignoring during close()",
                 sessionInfo.sessionId());
           } else {

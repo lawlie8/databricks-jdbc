@@ -3,6 +3,7 @@ package com.databricks.jdbc.telemetry.latency;
 import static com.databricks.jdbc.telemetry.TelemetryHelper.exportLatencyLog;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
@@ -26,23 +27,22 @@ public class DatabricksMetricsTimedProcessor {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-      // Check if the method is annotated with @DatabricksMetricsTimed
-      if (method.isAnnotationPresent(DatabricksMetricsTimed.class)) {
-        long startTime = System.currentTimeMillis();
-        try {
-          // Invoke the actual method
+      try {
+        if (method.isAnnotationPresent(DatabricksMetricsTimed.class)) {
+          long startTime = System.currentTimeMillis();
           Object result = method.invoke(target, args);
-          // Calculate execution time
           long executionTime = System.currentTimeMillis() - startTime;
-          exportLatencyLog(executionTime);
+          exportLatencyLog(executionTime); // Log is exported ONLY here.
           return result;
-        } catch (Throwable throwable) {
-          // Handle exceptions from the target method
-          throw throwable.getCause() != null ? throwable.getCause() : throwable;
+        } else {
+          // For methods like deleteSession(), this block is executed.
+          return method.invoke(target, args);
         }
+      } catch (InvocationTargetException e) {
+        // catch the exception from either path, unwraps it, and
+        // throws the real cause. It does not log latency.
+        throw e.getCause();
       }
-      // Default behavior for methods without @DatabricksMetricsTimed
-      return method.invoke(target, args);
     }
   }
 }
