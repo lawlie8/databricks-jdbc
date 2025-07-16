@@ -27,8 +27,10 @@ public class ConcurrentExecutionTests {
               () -> {
                 try {
                   runThreadQueries(threadNum);
+                  System.out.println("Thread " + threadNum + " completed successfully");
                   return true;
                 } catch (Exception e) {
+                  System.err.println("Thread " + threadNum + " failed: " + e.getMessage());
                   e.printStackTrace();
                   return false;
                 }
