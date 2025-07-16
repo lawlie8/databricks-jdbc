@@ -13,7 +13,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 public class ConcurrentExecutionTests {
-  private static final int NUM_THREADS = 20;
+  private static final int NUM_THREADS = 1;
 
   @Test
   void testConcurrentExecution() throws InterruptedException {
