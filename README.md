@@ -124,4 +124,3 @@ For more detailed information about integration tests and fake services, see [Te
 For more information, see the following resources:
 - [Integration Tests Guide](./docs/TESTING.md)
 - [Logging Configuration](./docs/LOGGING.md)
-

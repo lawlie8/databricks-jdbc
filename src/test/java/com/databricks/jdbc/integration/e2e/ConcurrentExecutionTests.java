@@ -13,7 +13,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 public class ConcurrentExecutionTests {
-  private static final int NUM_THREADS = 1;
+  private static final int NUM_THREADS = 20;
 
   @Test
   void testConcurrentExecution() throws InterruptedException {
@@ -27,10 +27,8 @@ public class ConcurrentExecutionTests {
               () -> {
                 try {
                   runThreadQueries(threadNum);
-                  System.out.println("Thread " + threadNum + " completed successfully");
                   return true;
                 } catch (Exception e) {
-                  System.err.println("Thread " + threadNum + " failed: " + e.getMessage());
                   e.printStackTrace();
                   return false;
                 }
