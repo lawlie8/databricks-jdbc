@@ -55,5 +55,5 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.JDBC_PAT_TEST_HOST_NAME }}
           DATABRICKS_HTTP_PATH: ${{ secrets.JDBC_PAT_TEST_HTTP_PATH }}
           DATABRICKS_DOGFOOD_HTTP_PATH: ${{ secrets.DATABRICKS_DOGFOOD_HTTP_PATH }}
-          DATABRICKS_CATALOG: ${{ secrets.DATABRICKS_CATALOG }}
-          DATABRICKS_SCHEMA: ${{ secrets.DATABRICKS_SCHEMA }}
+          DATABRICKS_CATALOG: main
+          DATABRICKS_SCHEMA: oss_jdbc_tests
