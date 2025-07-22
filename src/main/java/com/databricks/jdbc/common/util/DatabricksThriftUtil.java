@@ -56,8 +56,14 @@ public class DatabricksThriftUtil {
 
   public static String byteBufferToString(ByteBuffer buffer) {
     ByteBuffer newBuffer = buffer.duplicate(); // This is to avoid a BufferUnderflowException
-    long sigBits = newBuffer.getLong();
-    return new UUID(sigBits, sigBits).toString();
+    if (newBuffer.remaining() >= 16) {
+      long mostSigBits = newBuffer.getLong();
+      long leastSigBits = newBuffer.getLong();
+      return new UUID(mostSigBits, leastSigBits).toString();
+    } else {
+      long sigBits = newBuffer.getLong();
+      return new UUID(sigBits, sigBits).toString();
+    }
   }
 
   public static ExternalLink createExternalLink(TSparkArrowResultLink chunkInfo, long chunkIndex) {
@@ -286,9 +292,7 @@ public class DatabricksThriftUtil {
   public static TOperationHandle getOperationHandle(StatementId statementId) {
     THandleIdentifier identifier = statementId.toOperationIdentifier();
     // This will help logging the statement-Id in readable format for debugging purposes
-    LOGGER.debug(
-        "getOperationHandle {%s} for statementId {%s}",
-        statementId, byteBufferToString(identifier.guid));
+    LOGGER.debug("getOperationHandle for statementId {%s}", statementId);
     return new TOperationHandle()
         .setOperationId(identifier)
         .setOperationType(TOperationType.UNKNOWN);
