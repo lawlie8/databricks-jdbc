@@ -147,7 +147,9 @@ public enum DatabricksJdbcUrlParams {
       "Maximum number of concurrent presigned requests",
       "50"),
   HTTP_MAX_CONNECTIONS_PER_ROUTE(
-      "HttpMaxConnectionsPerRoute", "Maximum connections per route for HTTP client", String.format("%d", DatabricksJdbcConstants.DEFAULT_MAX_HTTP_CONNECTIONS_PER_ROUTE)),
+      "HttpMaxConnectionsPerRoute",
+      "Maximum connections per route for HTTP client",
+      String.format("%d", DatabricksJdbcConstants.DEFAULT_MAX_HTTP_CONNECTIONS_PER_ROUTE)),
   HTTP_CONNECTION_REQUEST_TIMEOUT_SECS(
       "HttpConnectionRequestTimeoutSeconds", "HTTP connection request timeout in seconds");
 
