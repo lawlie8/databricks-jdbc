@@ -324,13 +324,9 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
   @Override
   public Statement createStatement(
       int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY
-        || resultSetConcurrency != ResultSet.CONCUR_READ_ONLY
-        || resultSetHoldability != ResultSet.CLOSE_CURSORS_AT_COMMIT) {
-      throw new DatabricksSQLFeatureNotImplementedException(
-          "Not implemented in DatabricksConnection - createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability)");
-    }
-    return createStatement();
+
+    throw new DatabricksSQLFeatureNotImplementedException(
+        "Not implemented in DatabricksConnection - createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability)");
   }
 
   @Override

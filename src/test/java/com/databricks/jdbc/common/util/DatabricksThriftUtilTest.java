@@ -44,6 +44,20 @@ public class DatabricksThriftUtilTest {
   }
 
   @Test
+  void testByteBufferToStringWith16Bytes() {
+    DatabricksThriftUtil helper = new DatabricksThriftUtil();
+    long mostSigBits = 987654321L;
+    long leastSigBits = 123456789L;
+    ByteBuffer buffer = ByteBuffer.allocate(16); // 16 bytes = 2 * Long.BYTES
+    buffer.putLong(mostSigBits);
+    buffer.putLong(leastSigBits);
+    buffer.flip();
+    String result = helper.byteBufferToString(buffer);
+    String expectedUUID = new UUID(mostSigBits, leastSigBits).toString();
+    assertEquals(expectedUUID, result);
+  }
+
+  @Test
   void testVerifySuccessStatus() {
     assertDoesNotThrow(
         () ->
