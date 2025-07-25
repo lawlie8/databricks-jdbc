@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.databricks.jdbc.api.internal.IDatabricksSession;
 import com.databricks.jdbc.api.internal.IDatabricksStatementInternal;
+import com.databricks.jdbc.common.DatabricksJdbcConstants;
 import com.databricks.jdbc.exception.DatabricksHttpException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.model.client.thrift.generated.*;
@@ -44,11 +45,11 @@ public class DatabricksThriftUtilTest {
   }
 
   @Test
-  void testByteBufferToStringWith16Bytes() {
+  void testByteBufferToStringWithUuidLengthBytes() {
     DatabricksThriftUtil helper = new DatabricksThriftUtil();
     long mostSigBits = 987654321L;
     long leastSigBits = 123456789L;
-    ByteBuffer buffer = ByteBuffer.allocate(16); // 16 bytes = 2 * Long.BYTES
+    ByteBuffer buffer = ByteBuffer.allocate(DatabricksJdbcConstants.UUID_LENGTH);
     buffer.putLong(mostSigBits);
     buffer.putLong(leastSigBits);
     buffer.flip();
