@@ -218,6 +218,9 @@ public class TelemetryClientTest {
           new TelemetryFrontendLog()
               .setFrontendLogEventId("event2")); // This should trigger flush due to batch size
 
+      //assert that the flush occurred
+      assertEquals(0, client.getCurrentSize());
+
       // Wait 2 seconds (less than the flush interval)
       Thread.sleep(2000);
 
