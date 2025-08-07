@@ -94,6 +94,11 @@ public class TelemetryClient implements ITelemetryClient {
     scheduledExecutorService.shutdown();
   }
 
+  /**
+   *
+   * @param forceFlush - Flushes the eventsBatch for all size variations if forceFlush,
+   *                   otherwise only flushes if  eventsBatch size has breached
+   */
   private void flush(boolean forceFlush) {
     synchronized (this) {
       if (!forceFlush ? isBatchFull() : !eventsBatch.isEmpty()) {
