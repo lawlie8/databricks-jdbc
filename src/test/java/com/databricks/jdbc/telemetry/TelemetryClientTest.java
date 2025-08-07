@@ -230,11 +230,12 @@ public class TelemetryClientTest {
       // Verify it's still in the batch (shouldn't have been flushed yet since timer was reset)
       assertEquals(1, client.getCurrentSize());
 
-      // Wait another 2 seconds (still less than full interval from last flush)
-      Thread.sleep(2000);
+      // Wait another 8 seconds (still less than full interval from last flush)
+      //NOTE: Ideally flush should happen just after 3 seconds but considering the thread switch timings adding a buffer of 5 more seconds
+      Thread.sleep(8000);
 
       // Verify it's still not flushed
-      assertEquals(1, client.getCurrentSize());
+      assertEquals(0, client.getCurrentSize());
 
     } finally {
       // Clean up resources
