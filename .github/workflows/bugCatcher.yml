@@ -1,0 +1,61 @@
+name: Weekly bug catcher
+
+on:
+  schedule:
+    # Runs at 00:00 on every Monday
+    - cron: '0 0 * * 1'
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    name: Build and Run Integration Tests
+    runs-on:
+      group: databricks-protected-runner-group
+      labels: linux-ubuntu-latest
+    environment: azure-prod
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: [8]  # Add JDK 8 support
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v2
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'adopt'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Set up constants
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_USER: ${{ secrets.DATABRICKS_USER }}
+          DATABRICKS_JDBC_M2M_URL: ${{ secrets.DATABRICKS_JDBC_M2M_URL }}
+        run: |
+          echo "DATABRICKS_HOST=${DATABRICKS_HOST}" >> $GITHUB_ENV
+          echo "DATABRICKS_HTTP_PATH=${DATABRICKS_HTTP_PATH}" >> $GITHUB_ENV
+          echo "DATABRICKS_TOKEN=${DATABRICKS_TOKEN}" >> $GITHUB_ENV
+          echo "DATABRICKS_USER=${DATABRICKS_USER}" >> $GITHUB_ENV
+          echo "DATABRICKS_JDBC_M2M_URL=${DATABRICKS_JDBC_M2M_URL}" >> $GITHUB_ENV
+
+      - name: Run Integration Tests
+        run: mvn -B test -Dtest=*e2e/OAuthTests*
+        env:
+          DATABRICKS_HOST: ${{ env.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ env.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ env.DATABRICKS_TOKEN }}
+          DATABRICKS_USER: ${{ env.DATABRICKS_USER }}
+          DATABRICKS_JDBC_M2M_URL: ${{ env.DATABRICKS_JDBC_M2M_URL }}
