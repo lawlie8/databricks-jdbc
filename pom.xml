@@ -5,7 +5,7 @@
   <groupId>com.databricks</groupId>
   <artifactId>databricks-jdbc</artifactId>
   <!-- This value may be modified by a release script to reflect the current version of the driver. -->
-  <version>0.9.8-oss</version>
+  <version>1.0.9-oss</version>
   <packaging>jar</packaging>
   <name>Databricks JDBC Driver</name>
   <description>Databricks JDBC Driver.</description>
@@ -53,7 +53,9 @@
     <immutables.value.version>2.9.2</immutables.value.version>
     <httpclient.version>4.5.14</httpclient.version>
     <commons-io.version>2.14.0</commons-io.version>
-    <databricks-sdk.version>0.37.0</databricks-sdk.version>
+    <databricks-sdk.version>0.60.0</databricks-sdk.version>
+    <httpcomponents5.version>5.2.2</httpcomponents5.version>
+    <resilience4j.version>1.7.0</resilience4j.version>
     <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
     <sql-logic-test.version>0.3</sql-logic-test.version>
     <lz4-compression.version>1.8.0</lz4-compression.version>
@@ -66,6 +68,16 @@
     <bouncycastle.version>1.78.1</bouncycastle.version>
   </properties>
   <dependencies>
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+      <version>${httpcomponents5.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents.core5</groupId>
+      <artifactId>httpcore5</artifactId>
+      <version>${httpcomponents5.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.databricks</groupId>
       <artifactId>databricks-sdk-java</artifactId>
@@ -205,6 +217,16 @@
       <version>${lz4-compression.version}</version>
     </dependency>
     <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-circuitbreaker</artifactId>
+      <version>${resilience4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-core</artifactId>
+      <version>${resilience4j.version}</version>
+    </dependency>
+    <dependency>
       <groupId>jakarta.annotation</groupId>
       <artifactId>jakarta.annotation-api</artifactId>
       <version>${annotation.version}</version>
@@ -270,14 +292,11 @@
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
           <excludes>
+            <!-- Keep only heavy or environment-dependent exclusions -->
             <exclude>**/DriverTest.java</exclude>
             <exclude>**/integration/**/*.java</exclude>
           </excludes>
-          <argLine>
-            @{argLine}
-<!--            &#45;&#45;add-opens=java.base/java.nio=ALL-UNNAMED-->
-            -Dnet.bytebuddy.experimental=true
-          </argLine>
+          <argLine>@{argLine}</argLine>
           <systemPropertyVariables>
             <com.databricks.jdbc.loggerImpl>JDKLOGGER</com.databricks.jdbc.loggerImpl>
             <java.util.logging.config.file>${project.basedir}/src/test/resources/logging.properties</java.util.logging.config.file>
@@ -314,6 +333,13 @@
               <version>${immutables.value.version}</version>
             </path>
           </annotationProcessorPaths>
+          <testExcludes>
+            <testExclude>**/integration/**</testExclude>
+            <testExclude>**/fakeservice/**</testExclude>
+            <testExclude>**/DriverTest.java</testExclude>
+            <testExclude>**/DatabricksDriverExamples.java</testExclude>
+            <testExclude>**/DatabricksSdkClientTest.java</testExclude>
+          </testExcludes>
         </configuration>
       </plugin>
       <plugin>
@@ -488,6 +514,23 @@
     </plugins>
   </build>
   <profiles>
+    <profile>
+      <id>test-args-jdk8</id>
+      <activation>
+        <jdk>(,1.9)</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <!-- Local deploy for testing -->
       <id>local-deploy</id>

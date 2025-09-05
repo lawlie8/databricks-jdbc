@@ -4,9 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.*;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * The {@code JulLogger} class provides an implementation of the {@link JdbcLogger} interface using
@@ -25,18 +25,23 @@ public class JulLogger implements JdbcLogger {
 
   private static final JdbcLogger LOGGER = JdbcLoggerFactory.getLogger(JulLogger.class);
 
+  private static final String DEFAULT_PACKAGE_PREFIX = "com.databricks.jdbc";
+
+  private static final String DEFAULT_DRIVER_PACKAGE_PREFIX = "com.databricks.client.jdbc";
+
   public static final String STDOUT = "STDOUT";
 
-  public static final String PARENT_CLASS_PREFIX = "com.databricks.jdbc";
+  public static final String PARENT_CLASS_PREFIX = getPackagePrefix();
+
+  public static final String DRIVER_CLASS_PREFIX = getDriverPackagePrefix();
 
   public static final String DATABRICKS_LOG_FILE = "databricks_jdbc.log";
 
   public static final String JAVA_UTIL_LOGGING_CONFIG_FILE = "java.util.logging.config.file";
 
-  private static final Set<String> logMethods;
+  private static final Set<String> logMethods = new java.util.HashSet<String>();
 
   static {
-    logMethods = new HashSet<String>();
     logMethods.add("debug");
     logMethods.add("error");
     logMethods.add("info");
@@ -61,7 +66,7 @@ public class JulLogger implements JdbcLogger {
 
   @Override
   public void trace(String format, Object... arguments) {
-    trace(String.format(format, arguments));
+    trace(String.format(slf4jToJavaFormat(format), arguments));
   }
 
   /** {@inheritDoc} */
@@ -72,7 +77,7 @@ public class JulLogger implements JdbcLogger {
 
   @Override
   public void debug(String format, Object... arguments) {
-    debug(String.format(format, arguments));
+    debug(String.format(slf4jToJavaFormat(format), arguments));
   }
 
   /** {@inheritDoc} */
@@ -83,7 +88,7 @@ public class JulLogger implements JdbcLogger {
 
   @Override
   public void info(String format, Object... arguments) {
-    info(String.format(format, arguments));
+    info(String.format(slf4jToJavaFormat(format), arguments));
   }
 
   /** {@inheritDoc} */
@@ -94,7 +99,7 @@ public class JulLogger implements JdbcLogger {
 
   @Override
   public void warn(String format, Object... arguments) {
-    warn(String.format(format, arguments));
+    warn(String.format(slf4jToJavaFormat(format), arguments));
   }
 
   /** {@inheritDoc} */
@@ -105,7 +110,7 @@ public class JulLogger implements JdbcLogger {
 
   @Override
   public void error(String format, Object... arguments) {
-    error(String.format(format, arguments));
+    error(String.format(slf4jToJavaFormat(format), arguments));
   }
 
   /** {@inheritDoc} */
@@ -116,7 +121,7 @@ public class JulLogger implements JdbcLogger {
 
   @Override
   public void error(Throwable throwable, String format, Object... arguments) {
-    error(String.format(format, arguments), throwable);
+    error(String.format(slf4jToJavaFormat(format), arguments), throwable);
   }
 
   /**
@@ -137,9 +142,14 @@ public class JulLogger implements JdbcLogger {
       // java.util.logging uses hierarchical loggers, so we just need to set the log level on the
       // parent package logger
       Logger jdbcJulLogger = Logger.getLogger(PARENT_CLASS_PREFIX);
-
       jdbcJulLogger.setLevel(level);
       jdbcJulLogger.setUseParentHandlers(false);
+
+      // Jdbc client driver is present in a different namespace and hence need to configure its
+      // logger separately
+      Logger jdbcDriverJulLogger = Logger.getLogger(DRIVER_CLASS_PREFIX);
+      jdbcDriverJulLogger.setLevel(level);
+      jdbcDriverJulLogger.setUseParentHandlers(false);
 
       String logPattern = getLogPattern(logDir);
       Handler handler;
@@ -159,6 +169,7 @@ public class JulLogger implements JdbcLogger {
       handler.setLevel(level);
       handler.setFormatter(new Slf4jFormatter());
       jdbcJulLogger.addHandler(handler);
+      jdbcDriverJulLogger.addHandler(handler);
     }
   }
 
@@ -187,16 +198,20 @@ public class JulLogger implements JdbcLogger {
    * </ol>
    */
   protected static String[] getCaller() {
-    StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-    boolean foundLogMethod = false;
-    for (StackTraceElement element : stackTrace) {
-      if (!foundLogMethod && logMethods.contains(element.getMethodName())) {
-        foundLogMethod = true;
-      } else if (foundLogMethod && !logMethods.contains(element.getMethodName())) {
-        return new String[] {element.getClassName(), element.getMethodName()};
+    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+    boolean sawLogMethod = false;
+    for (StackTraceElement e : st) {
+      if (!sawLogMethod) {
+        if (logMethods.contains(e.getMethodName())) {
+          sawLogMethod = true;
+        }
+        continue;
+      }
+      if (!logMethods.contains(e.getMethodName())) {
+        return new String[] {e.getClassName(), e.getMethodName()};
       }
     }
-    return new String[] {"unknownClass", "unknownMethod"}; // lost in the stack trace wonderland :)
+    return new String[] {"unknownClass", "unknownMethod"};
   }
 
   /**
@@ -223,5 +238,28 @@ public class JulLogger implements JdbcLogger {
     }
 
     return dirPath.resolve(DATABRICKS_LOG_FILE).toString();
+  }
+
+  private static String getPackagePrefix() {
+    String prefix = System.getenv("JDBC_PACKAGE_PREFIX");
+    if (prefix != null && !prefix.isEmpty()) {
+      return prefix;
+    }
+    return DEFAULT_PACKAGE_PREFIX;
+  }
+
+  private static String getDriverPackagePrefix() {
+    String prefix = System.getenv("JDBC_DRIVER_PACKAGE_PREFIX");
+    if (StringUtils.isNotEmpty(prefix)) {
+      return prefix;
+    }
+    return DEFAULT_DRIVER_PACKAGE_PREFIX;
+  }
+
+  private String slf4jToJavaFormat(String format) {
+    if (format == null) {
+      return null;
+    }
+    return format.replace("{}", "%s");
   }
 }
