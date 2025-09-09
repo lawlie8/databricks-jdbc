@@ -38,10 +38,25 @@ jobs:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
 
-      - name: Generate and Deploy Thin JAR
+      - name: Deploy Thin JAR (Simple approach)
         run: |
-          # Deploy thin JAR as a separate artifact to the same staging repository
-          ./release-thin-jar.sh
+          # Get version from POM
+          VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+          echo "Deploying thin JAR version: $VERSION"
+          
+          # Update version in thin_public_pom.xml
+          sed -i "s/<version>.*<\/version>/<version>$VERSION<\/version>/" thin_public_pom.xml
+          
+          # Thin JAR already exists from main build - just deploy it with different POM
+          mvn gpg:sign-and-deploy-file \
+            -Dfile="target/databricks-jdbc-${VERSION}-thin.jar" \
+            -DpomFile=thin_public_pom.xml \
+            -DrepositoryId=central \
+            -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ \
+            -DgroupId=com.databricks \
+            -DartifactId=databricks-jdbc-thin \
+            -Dversion="$VERSION" \
+            -Dpackaging=jar
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
