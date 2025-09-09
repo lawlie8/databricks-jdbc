@@ -32,31 +32,24 @@ jobs:
           gpg-connect-agent reloadagent /bye
 
       - name: Publish to the Maven Central Repository
-        run: mvn -Prelease --batch-mode deploy -Dnvd.api.key=${{ secrets.NVD_API_KEY }}
-        env:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-
-      - name: Deploy Thin JAR (Simple approach)
         run: |
-          # Get version from POM
-          VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          echo "Deploying thin JAR version: $VERSION"
+          # Deploy main artifacts (uber JAR, sources, javadoc)
+          mvn -Prelease --batch-mode deploy -Dnvd.api.key=${{ secrets.NVD_API_KEY }}
           
-          # Update version in thin_public_pom.xml
-          sed -i "s/<version>.*<\/version>/<version>$VERSION<\/version>/" thin_public_pom.xml
-          
-          # Thin JAR already exists from main build - just deploy it with different POM
-          mvn gpg:sign-and-deploy-file \
+      - name: Publish Thin JAR as Separate Artifact
+        run: |
+          # Sign and deploy thin JAR with full dependency metadata
+          # Uses GPG signing to ensure artifact integrity
+          mvn -Prelease gpg:sign-and-deploy-file \
             -Dfile="target/databricks-jdbc-${VERSION}-thin.jar" \
             -DpomFile=thin_public_pom.xml \
             -DrepositoryId=central \
-            -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ \
             -DgroupId=com.databricks \
             -DartifactId=databricks-jdbc-thin \
-            -Dversion="$VERSION" \
-            -Dpackaging=jar
+            -Dversion="${VERSION}" \
+            -Dpackaging=jar \
+            -DgeneratePom=false \
+            -Dgpg.passphrase="${GPG_PASSPHRASE}"
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
