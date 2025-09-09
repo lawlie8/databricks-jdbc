@@ -22,6 +22,7 @@ cat > thin-jar-pom.xml << 'EOF'
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.databricks</groupId>
   <artifactId>databricks-jdbc-thin</artifactId>
+  <!-- This value may be modified by a release script to reflect the current version of the driver. -->
   <version>VERSION_PLACEHOLDER</version>
   <packaging>jar</packaging>
   <name>Databricks JDBC Driver Thin</name>
@@ -51,10 +52,12 @@ cat > thin-jar-pom.xml << 'EOF'
     <url>https://github.com/databricks/databricks-jdbc/issues</url>
   </issueManagement>
   
+  <!-- Define version properties for all dependencies -->
   <properties>
 PROPERTIES_PLACEHOLDER
   </properties>
   
+  <!-- Dependency management for version consistency -->
   <dependencyManagement>
     <dependencies>
       <!-- Force safe version of commons-lang3 https://nvd.nist.gov/vuln/detail/CVE-2025-48924 -->
@@ -74,6 +77,7 @@ PROPERTIES_PLACEHOLDER
     </dependencies>
   </dependencyManagement>
   
+  <!-- Runtime dependencies required by the thin JAR -->
   <dependencies>
 DEPENDENCIES_PLACEHOLDER
   </dependencies>
@@ -83,11 +87,12 @@ EOF
 # Replace version
 sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" thin-jar-pom.xml
 
-# Extract properties (version management)
+# Extract properties (only version properties needed for runtime dependencies)
 echo "Extracting version properties..."
 PROPERTIES=$(awk '/<properties>/,/<\/properties>/' pom.xml | \
-  grep -E '<[a-z.-]+\.version>' | \
-  sed 's/^/    /')
+  grep -E '<[a-z0-9.-]+\.version>' | \
+  grep -v -E '(mockito|junit|maven-surefire-plugin|sql-logic-test|immutables|wiremock|log4j)' | \
+  sed 's/^[[:space:]]*/    /')
 
 # Replace properties placeholder
 sed -i "/PROPERTIES_PLACEHOLDER/r /dev/stdin" thin-jar-pom.xml <<< "$PROPERTIES"
@@ -95,40 +100,39 @@ sed -i "/PROPERTIES_PLACEHOLDER/d" thin-jar-pom.xml
 
 # Extract dependencies (excluding test scope and provided scope)
 echo "Extracting runtime dependencies..."
-DEPENDENCIES=$(awk '/<dependencies>/,/<\/dependencies>/' pom.xml | \
-  awk '/<dependency>/,/<\/dependency>/' | \
-  grep -v '<scope>test</scope>' | \
-  grep -v '<scope>provided</scope>' | \
-  sed 's/^/    /')
 
-# Format dependencies properly
-FORMATTED_DEPS=""
-IN_DEP=0
-CURRENT_DEP=""
-while IFS= read -r line; do
-  if [[ $line == *"<dependency>"* ]]; then
-    IN_DEP=1
-    CURRENT_DEP="    <dependency>\n"
-  elif [[ $line == *"</dependency>"* ]]; then
-    CURRENT_DEP="${CURRENT_DEP}    </dependency>\n"
-    # Check if this dependency should be included (not test or provided)
-    if ! echo "$CURRENT_DEP" | grep -q '<scope>test</scope>' && \
-       ! echo "$CURRENT_DEP" | grep -q '<scope>provided</scope>'; then
-      FORMATTED_DEPS="${FORMATTED_DEPS}${CURRENT_DEP}"
-    fi
-    IN_DEP=0
-    CURRENT_DEP=""
-  elif [[ $IN_DEP -eq 1 ]]; then
-    # Properly indent dependency content
-    TRIMMED=$(echo "$line" | sed 's/^[[:space:]]*//')
-    if [[ ! -z "$TRIMMED" ]]; then
-      CURRENT_DEP="${CURRENT_DEP}      ${TRIMMED}\n"
-    fi
-  fi
-done <<< "$DEPENDENCIES"
+# Create temporary file for dependencies
+rm -f /tmp/deps.tmp
+touch /tmp/deps.tmp
 
-# Write dependencies to temporary file
-echo -e "$FORMATTED_DEPS" > /tmp/deps.tmp
+# Process each dependency block
+awk '
+BEGIN { in_dependencies = 0; in_dependency = 0; dependency = ""; }
+/<dependencies>/ { in_dependencies = 1; next }
+/<\/dependencies>/ { in_dependencies = 0; next }
+in_dependencies && /<dependency>/ { 
+    in_dependency = 1
+    dependency = "    <dependency>\n"
+    next 
+}
+in_dependencies && in_dependency && /<\/dependency>/ {
+    dependency = dependency "    </dependency>"
+    # Only include if not test or provided scope and not log4j plugin extensions
+    if (dependency !~ /<scope>test<\/scope>/ && dependency !~ /<scope>provided<\/scope>/ && dependency !~ /log4j-transform-maven-shade-plugin-extensions/) {
+        print dependency
+    }
+    in_dependency = 0
+    dependency = ""
+    next
+}
+in_dependencies && in_dependency {
+    # Clean and re-indent the line
+    gsub(/^[ \t]*/, "", $0)  # Remove leading whitespace
+    if ($0 != "") {
+        dependency = dependency "      " $0 "\n"
+    }
+}
+' pom.xml > /tmp/deps.tmp
 
 # Replace dependencies placeholder
 sed -i "/DEPENDENCIES_PLACEHOLDER/r /tmp/deps.tmp" thin-jar-pom.xml

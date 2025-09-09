@@ -79,26 +79,21 @@
   
   <!-- Runtime dependencies required by the thin JAR -->
   <dependencies>
-    <!-- Databricks SDK -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>${commons-lang3.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.databricks</groupId>
       <artifactId>databricks-sdk-java</artifactId>
       <version>${databricks-sdk.version}</version>
     </dependency>
-    
-    <!-- Apache Commons -->
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
       <version>${commons-configuration.version}</version>
     </dependency>
-    <dependency>
-      <groupId>commons-io</groupId>
-      <artifactId>commons-io</artifactId>
-      <version>${commons-io.version}</version>
-    </dependency>
-    
-    <!-- Apache Arrow for columnar data -->
     <dependency>
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-memory-core</artifactId>
@@ -119,39 +114,26 @@
       <artifactId>arrow-memory-netty</artifactId>
       <version>${arrow.version}</version>
     </dependency>
-    
-    <!-- HTTP Client -->
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
       <version>${httpclient.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.httpcomponents.client5</groupId>
-      <artifactId>httpclient5</artifactId>
-      <version>${async-httpclient.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.httpcomponents.core5</groupId>
-      <artifactId>httpcore5</artifactId>
-      <version>${async-httpclient.version}</version>
-    </dependency>
-    
-    <!-- Thrift -->
-    <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>
       <version>${thrift.version}</version>
     </dependency>
-    
-    <!-- Logging -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <version>${slf4j.version}</version>
     </dependency>
-    
-    <!-- Google libraries -->
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>${commons-io.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>annotations</artifactId>
@@ -162,8 +144,6 @@
       <artifactId>guava</artifactId>
       <version>${google.guava.version}</version>
     </dependency>
-    
-    <!-- Security libraries -->
     <dependency>
       <groupId>com.nimbusds</groupId>
       <artifactId>nimbus-jose-jwt</artifactId>
@@ -179,8 +159,6 @@
       <artifactId>bcpkix-jdk18on</artifactId>
       <version>${bouncycastle.version}</version>
     </dependency>
-    
-    <!-- Jackson JSON processing -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
@@ -196,22 +174,16 @@
       <artifactId>jackson-core</artifactId>
       <version>${jackson.version}</version>
     </dependency>
-    
-    <!-- Compression -->
     <dependency>
       <groupId>org.lz4</groupId>
       <artifactId>lz4-java</artifactId>
       <version>${lz4-compression.version}</version>
     </dependency>
-    
-    <!-- gRPC Context (security fix) -->
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-context</artifactId>
       <version>${grpc.version}</version>
     </dependency>
-    
-    <!-- Netty (security fixes) -->
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-common</artifactId>
@@ -222,15 +194,21 @@
       <artifactId>netty-buffer</artifactId>
       <version>${netty.version}</version>
     </dependency>
-    
-    <!-- Jakarta Annotations -->
     <dependency>
       <groupId>jakarta.annotation</groupId>
       <artifactId>jakarta.annotation-api</artifactId>
       <version>${annotation.version}</version>
     </dependency>
-    
-    <!-- Resilience4j circuit breaker -->
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
+      <version>${async-httpclient.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents.core5</groupId>
+      <artifactId>httpcore5</artifactId>
+      <version>${async-httpclient.version}</version>
+    </dependency>
     <dependency>
       <groupId>io.github.resilience4j</groupId>
       <artifactId>resilience4j-circuitbreaker</artifactId>
