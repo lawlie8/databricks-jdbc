@@ -38,6 +38,15 @@ jobs:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
 
+      - name: Generate and Deploy Thin JAR
+        run: |
+          # Deploy thin JAR as a separate artifact to the same staging repository
+          ./release-thin-jar.sh
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
