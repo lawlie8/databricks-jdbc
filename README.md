@@ -54,7 +54,6 @@ The thin JAR contains only the driver code and declares all dependencies in its 
 To install the thin JAR locally with dependency metadata:
 ```bash
 VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-sed -i "s/<version>.*<\/version>/<version>$VERSION<\/version>/" thin_public_pom.xml
 mvn install:install-file -Dfile="target/databricks-jdbc-${VERSION}-thin.jar" -DpomFile=thin_public_pom.xml
 ```
 
