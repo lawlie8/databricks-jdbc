@@ -29,10 +29,11 @@ Add the following dependency to your `pom.xml`:
 For applications requiring explicit dependency management, use the thin JAR variant:
 
 ```xml
+<!-- Note: Available from version 1.0.10-oss onwards -->
 <dependency>
   <groupId>com.databricks</groupId>
   <artifactId>databricks-jdbc-thin</artifactId>
-  <version>1.0.9-oss</version>
+  <version>1.0.10-oss</version>
 </dependency>
 ```
 
