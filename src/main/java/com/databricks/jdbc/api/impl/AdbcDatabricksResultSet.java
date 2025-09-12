@@ -23,6 +23,8 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.apache.arrow.flight.ArrowFlightReader;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import com.databricks.jdbc.api.impl.arrow.AbstractArrowResultChunk;
+import com.databricks.jdbc.api.impl.arrow.ChunkProvider;
 
 /**
  * ADBC (Arrow Database Connectivity) compliant implementation of {@link IDatabricksResultSet}. This
@@ -114,7 +116,7 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
 
     return StreamSupport.stream(
         Spliterators.spliteratorUnknownSize(
-            new ArrowVectorSchemaRootIterator(arrowResult),
+            new ArrowVectorSchemaRootIterator(arrowResult, session),
             Spliterator.ORDERED | Spliterator.NONNULL),
         false);
   }
@@ -130,12 +132,9 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
           false);
     }
 
-    // For now, we don't have direct Flight support, but we can create a reader-like interface
-    // This would need to be implemented with actual Arrow Flight integration
-    throw new DatabricksSQLFeatureNotSupportedException(
-        "ArrowFlightReader not yet implemented. Use getArrowStream() for batch access.",
-        DatabricksDriverErrorCode.FEATURE_NOT_IMPLEMENTED,
-        false);
+    // Create a Flight-like reader that wraps our streaming implementation
+    ArrowStreamResult arrowResult = (ArrowStreamResult) getExecutionResult();
+    return new AdbcArrowFlightReader(arrowResult, session);
   }
 
   @Override
@@ -150,18 +149,25 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
    */
   private static class ArrowVectorSchemaRootIterator implements Iterator<VectorSchemaRoot> {
     private final ArrowStreamResult arrowResult;
+    private final ArrowBatchExtractor batchExtractor;
     private boolean hasNextChecked = false;
     private boolean hasNextValue = false;
 
     ArrowVectorSchemaRootIterator(ArrowStreamResult arrowResult) {
       this.arrowResult = arrowResult;
+      this.batchExtractor = new ArrowBatchExtractor(arrowResult);
+    }
+
+    ArrowVectorSchemaRootIterator(ArrowStreamResult arrowResult, IDatabricksSession session) {
+      this.arrowResult = arrowResult;
+      this.batchExtractor = new ArrowBatchExtractor(arrowResult, session);
     }
 
     @Override
     public boolean hasNext() {
       if (!hasNextChecked) {
         try {
-          hasNextValue = arrowResult.hasNext();
+          hasNextValue = batchExtractor.hasNextBatch();
           hasNextChecked = true;
         } catch (Exception e) {
           LOGGER.error("Error checking for next Arrow batch", e);
@@ -181,16 +187,252 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
         // Reset the hasNext check
         hasNextChecked = false;
 
-        // This is a simplified implementation - in a full implementation,
-        // we would need to extract the actual VectorSchemaRoot from the ArrowStreamResult
-        // For now, we'll throw an exception to indicate this needs proper implementation
-        throw new UnsupportedOperationException(
-            "VectorSchemaRoot extraction from ArrowStreamResult not yet implemented. "
-                + "This requires deeper integration with the Arrow chunk processing.");
+        return batchExtractor.getNextBatch();
 
       } catch (Exception e) {
         throw new RuntimeException("Error retrieving next Arrow batch", e);
       }
+    }
+  }
+
+  /**
+   * Helper class to extract VectorSchemaRoot batches from ArrowStreamResult. This provides the
+   * bridge between the existing chunk-based architecture and the ADBC streaming interface.
+   */
+  private static class ArrowBatchExtractor {
+    private final ArrowStreamResult arrowResult;
+    private final AdbcArrowStreamOptimizer optimizer;
+    private AbstractArrowResultChunk currentChunk;
+    private int currentBatchIndex = 0;
+    private boolean initialized = false;
+
+    ArrowBatchExtractor(ArrowStreamResult arrowResult) {
+      this.arrowResult = arrowResult;
+      // Initialize optimizer - we'll need to get the session from somewhere
+      this.optimizer = null; // Placeholder - would need session access
+    }
+
+    ArrowBatchExtractor(ArrowStreamResult arrowResult, IDatabricksSession session) {
+      this.arrowResult = arrowResult;
+      this.optimizer = new AdbcArrowStreamOptimizer(session);
+    }
+
+    boolean hasNextBatch() throws DatabricksSQLException {
+      ensureInitialized();
+
+      // Check if there are more batches in the current chunk
+      if (currentChunk != null && currentBatchIndex < currentChunk.getRecordBatchCountInChunk()) {
+        return true;
+      }
+
+      // Check if there are more chunks available
+      return arrowResult.hasNext();
+    }
+
+    VectorSchemaRoot getNextBatch() throws DatabricksSQLException {
+      if (!hasNextBatch()) {
+        throw new java.util.NoSuchElementException("No more Arrow batches available");
+      }
+
+      ensureInitialized();
+
+      // If we've exhausted current chunk, move to next
+      if (currentChunk == null
+          || currentBatchIndex >= currentChunk.getRecordBatchCountInChunk()) {
+        if (arrowResult.hasNext()) {
+          arrowResult.next(); // Move to next chunk
+          currentChunk = getCurrentChunk();
+          currentBatchIndex = 0;
+        } else {
+          throw new java.util.NoSuchElementException("No more chunks available");
+        }
+      }
+
+      // Extract VectorSchemaRoot from current batch
+      return createVectorSchemaRootFromBatch(currentChunk, currentBatchIndex++);
+    }
+
+    private void ensureInitialized() throws DatabricksSQLException {
+      if (!initialized) {
+        if (arrowResult.hasNext()) {
+          arrowResult.next(); // Initialize first chunk
+          currentChunk = getCurrentChunk();
+          currentBatchIndex = 0;
+        }
+        initialized = true;
+      }
+    }
+
+    private AbstractArrowResultChunk getCurrentChunk() {
+      // Access the current chunk from ArrowStreamResult
+      // This requires accessing package-private members or adding public accessors
+      try {
+        // Use reflection as a temporary solution until we can modify ArrowStreamResult
+        java.lang.reflect.Field chunkProviderField =
+            ArrowStreamResult.class.getDeclaredField("chunkProvider");
+        chunkProviderField.setAccessible(true);
+        ChunkProvider chunkProvider = (ChunkProvider) chunkProviderField.get(arrowResult);
+        return chunkProvider.getChunk();
+      } catch (Exception e) {
+        LOGGER.error("Error accessing current chunk from ArrowStreamResult", e);
+        throw new RuntimeException("Failed to access Arrow chunk data", e);
+      }
+    }
+
+    private VectorSchemaRoot createVectorSchemaRootFromBatch(
+        AbstractArrowResultChunk chunk, int batchIndex) throws DatabricksSQLException {
+
+      try {
+        // Get the record batch (list of value vectors)
+        List<List<org.apache.arrow.vector.ValueVector>> recordBatches = chunk.getRecordBatches();
+        if (batchIndex >= recordBatches.size()) {
+          throw new IndexOutOfBoundsException("Batch index " + batchIndex + " out of bounds");
+        }
+
+        List<org.apache.arrow.vector.ValueVector> vectors = recordBatches.get(batchIndex);
+
+        // Create VectorSchemaRoot from value vectors using optimizer if available
+        if (optimizer != null) {
+          return optimizer.createOptimizedVectorSchemaRoot(vectors, vectors.get(0).getAllocator());
+        } else {
+          // Fallback to standard creation
+          return createVectorSchemaRootFromVectors(vectors);
+        }
+
+      } catch (Exception e) {
+        throw new DatabricksSQLException("Error creating VectorSchemaRoot from batch", e);
+      }
+    }
+
+    private VectorSchemaRoot createVectorSchemaRootFromVectors(
+        List<org.apache.arrow.vector.ValueVector> vectors) {
+
+      if (vectors.isEmpty()) {
+        // Return empty VectorSchemaRoot
+        return VectorSchemaRoot.of();
+      }
+
+      // Create field vectors and schema
+      List<org.apache.arrow.vector.FieldVector> fieldVectors = new ArrayList<>();
+      List<org.apache.arrow.vector.types.pojo.Field> fields = new ArrayList<>();
+
+      for (int i = 0; i < vectors.size(); i++) {
+        org.apache.arrow.vector.ValueVector vector = vectors.get(i);
+        if (vector instanceof org.apache.arrow.vector.FieldVector) {
+          org.apache.arrow.vector.FieldVector fieldVector =
+              (org.apache.arrow.vector.FieldVector) vector;
+          fieldVectors.add(fieldVector);
+          fields.add(fieldVector.getField());
+        } else {
+          LOGGER.warn("Vector at index {} is not a FieldVector, skipping", i);
+        }
+      }
+
+      // Create schema and VectorSchemaRoot
+      org.apache.arrow.vector.types.pojo.Schema schema =
+          new org.apache.arrow.vector.types.pojo.Schema(fields);
+
+      // Create VectorSchemaRoot with the field vectors
+      VectorSchemaRoot root = VectorSchemaRoot.create(schema, vectors.get(0).getAllocator());
+
+      // Transfer data from original vectors to new root vectors
+      for (int i = 0; i < fieldVectors.size(); i++) {
+        org.apache.arrow.vector.FieldVector sourceVector = fieldVectors.get(i);
+        org.apache.arrow.vector.FieldVector targetVector = root.getVector(i);
+
+        // Transfer the data
+        org.apache.arrow.vector.util.TransferPair transferPair =
+            sourceVector.getTransferPair(targetVector);
+        transferPair.transfer();
+      }
+
+      // Set the row count
+      if (!fieldVectors.isEmpty()) {
+        root.setRowCount(fieldVectors.get(0).getValueCount());
+      }
+
+      return root;
+    }
+  }
+
+  /**
+   * ADBC-compatible ArrowFlightReader implementation that wraps ArrowStreamResult.
+   * Provides direct streaming access to Arrow data with minimal overhead.
+   */
+  private static class AdbcArrowFlightReader extends ArrowFlightReader {
+    private final ArrowBatchExtractor batchExtractor;
+    private final IDatabricksSession session;
+    private VectorSchemaRoot currentRoot;
+    private boolean closed = false;
+
+    AdbcArrowFlightReader(ArrowStreamResult arrowResult, IDatabricksSession session) {
+      this.batchExtractor = new ArrowBatchExtractor(arrowResult);
+      this.session = session;
+    }
+
+    @Override
+    public VectorSchemaRoot getRoot() {
+      return currentRoot;
+    }
+
+    @Override
+    public boolean next() {
+      if (closed) {
+        return false;
+      }
+      
+      try {
+        if (batchExtractor.hasNextBatch()) {
+          if (currentRoot != null) {
+            currentRoot.close(); // Clean up previous root
+          }
+          currentRoot = batchExtractor.getNextBatch();
+          return true;
+        } else {
+          return false;
+        }
+      } catch (Exception e) {
+        LOGGER.error("Error reading next Arrow batch", e);
+        return false;
+      }
+    }
+
+    @Override
+    public long bytesRead() {
+      // Return approximate bytes read - could be enhanced with actual tracking
+      if (currentRoot != null) {
+        return currentRoot.getRowCount() * currentRoot.getFieldVectors().size() * 8; // Rough estimate
+      }
+      return 0;
+    }
+
+    @Override
+    public void close() throws Exception {
+      if (!closed) {
+        if (currentRoot != null) {
+          currentRoot.close();
+          currentRoot = null;
+        }
+        closed = true;
+      }
+    }
+
+    @Override
+    public java.util.Iterator<VectorSchemaRoot> iterator() {
+      return new java.util.Iterator<VectorSchemaRoot>() {
+        @Override
+        public boolean hasNext() {
+          return !closed && AdbcArrowFlightReader.this.next();
+        }
+
+        @Override
+        public VectorSchemaRoot next() {
+          if (!hasNext()) {
+            throw new java.util.NoSuchElementException("No more batches available");
+          }
+          return currentRoot;
+        }
+      };
     }
   }
 
