@@ -164,8 +164,11 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
       // Get allocator from session context or create one
       BufferAllocator allocator = getArrowAllocator();
       
+      // Get schema from existing Arrow stream
+      org.apache.arrow.vector.types.pojo.Schema schema = getArrowSchemaFromResult(arrowResult);
+      
       // Create ArrowIPC iterator from the arrow stream result
-      return ArrowIpcStreamIterator.fromArrowStreamResult(arrowResult, allocator);
+      return ArrowIpcStreamIterator.fromArrowStreamResult(arrowResult, allocator, schema);
       
     } catch (Exception e) {
       LOGGER.error("Failed to create ArrowIPC stream iterator", e);
@@ -524,15 +527,29 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
    * This method provides access to memory allocation for Arrow operations.
    */
   private BufferAllocator getArrowAllocator() {
-    // In a full implementation, this would get the allocator from the session
-    // or connection context. For now, we'll need to access it through the
-    // existing Arrow infrastructure or create a child allocator.
-    // This is a placeholder that would need to be implemented based on
-    // the actual memory management strategy in the driver.
-    
-    // TODO: Implement proper allocator access from session context
-    throw new UnsupportedOperationException(
-        "Arrow allocator access needs to be implemented based on driver's memory management");
+    // Use the same pattern as the existing Arrow infrastructure
+    // Create a child allocator from a root allocator 
+    return new org.apache.arrow.memory.RootAllocator("ADBC-IPC", 0, Long.MAX_VALUE);
+  }
+
+  /**
+   * Extracts Arrow schema from ArrowStreamResult using existing column information.
+   */
+  private org.apache.arrow.vector.types.pojo.Schema getArrowSchemaFromResult(ArrowStreamResult arrowResult) 
+      throws SQLException {
+    try {
+      // Get the existing VectorSchemaRoot iterator and extract schema from first batch
+      ArrowVectorSchemaRootIterator iterator = new ArrowVectorSchemaRootIterator(arrowResult, session);
+      if (iterator.hasNext()) {
+        VectorSchemaRoot root = iterator.next();
+        return root.getSchema();
+      } else {
+        // Create empty schema if no data
+        return new org.apache.arrow.vector.types.pojo.Schema(new java.util.ArrayList<>());
+      }
+    } catch (Exception e) {
+      throw new SQLException("Failed to extract Arrow schema from result", e);
+    }
   }
 
   @Override
