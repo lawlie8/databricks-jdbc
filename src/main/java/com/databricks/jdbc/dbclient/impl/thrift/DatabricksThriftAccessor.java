@@ -264,7 +264,7 @@ final class DatabricksThriftAccessor {
                 "Connection [%s] Statement [%s] Session [%s] Thrift fetch latency: %dms",
                 connectionUuid, statementId, sessionDebugInfo, fetchLatencyMillis));
       }
-      return new DatabricksResultSet(
+      return DatabricksResultSetFactory.createFromThriftAccessor(
           getStatementStatus(statusResp),
           statementId,
           resultSet,

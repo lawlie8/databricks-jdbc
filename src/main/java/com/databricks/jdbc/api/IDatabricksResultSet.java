@@ -5,6 +5,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Struct;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.apache.arrow.flight.ArrowFlightReader;
+import org.apache.arrow.vector.VectorSchemaRoot;
 
 /**
  * Extends the standard JDBC {@link ResultSet} interface to provide Databricks-specific
@@ -93,4 +96,51 @@ public interface IDatabricksResultSet extends ResultSet {
    * @throws SQLException if the column is not of `STRUCT` type or if any SQL error occurs
    */
   Struct getStruct(int columnIndex) throws SQLException;
+
+  // ADBC (Arrow Database Connectivity) Extensions
+
+  /**
+   * Returns whether this result set supports native Arrow streaming access. When true, {@link
+   * #getArrowStream()} and related methods can be used for high-performance columnar data access.
+   *
+   * @return true if Arrow streaming is supported, false otherwise
+   * @throws SQLException if a database access error occurs
+   */
+  boolean supportsArrowStreaming() throws SQLException;
+
+  /**
+   * Provides access to the result set as a stream of Arrow VectorSchemaRoot objects. This enables
+   * high-performance columnar data processing without the overhead of JDBC row-by-row conversion.
+   *
+   * <p>This method is only available when {@link #supportsArrowStreaming()} returns true. Each
+   * VectorSchemaRoot in the stream represents a batch of rows in columnar format.
+   *
+   * @return a Stream of VectorSchemaRoot objects representing the result data
+   * @throws SQLException if Arrow streaming is not supported or a database access error occurs
+   * @throws UnsupportedOperationException if ADBC mode is not enabled
+   */
+  Stream<VectorSchemaRoot> getArrowStream() throws SQLException;
+
+  /**
+   * Returns an ArrowFlightReader for streaming access to the result set data. This provides the
+   * most direct access to Arrow data with minimal conversion overhead.
+   *
+   * <p>The returned reader must be closed by the caller to free resources. This method is only
+   * available when {@link #supportsArrowStreaming()} returns true.
+   *
+   * @return an ArrowFlightReader for streaming the result data
+   * @throws SQLException if Arrow streaming is not supported or a database access error occurs
+   * @throws UnsupportedOperationException if ADBC mode is not enabled
+   */
+  ArrowFlightReader getArrowReader() throws SQLException;
+
+  /**
+   * Returns whether this result set is operating in ADBC (Arrow Database Connectivity) mode. In
+   * ADBC mode, the result set prioritizes Arrow-native operations and may have different
+   * performance characteristics compared to standard JDBC mode.
+   *
+   * @return true if operating in ADBC mode, false for standard JDBC mode
+   * @throws SQLException if a database access error occurs
+   */
+  boolean isAdbcMode() throws SQLException;
 }

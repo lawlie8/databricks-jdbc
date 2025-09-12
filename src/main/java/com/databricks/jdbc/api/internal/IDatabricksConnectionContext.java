@@ -363,4 +363,18 @@ public interface IDatabricksConnectionContext {
 
   /** Returns whether batched INSERT optimization is enabled */
   boolean isBatchedInsertsEnabled();
+
+  // ADBC (Arrow Database Connectivity) Configuration
+
+  /** Returns whether ADBC (Arrow Database Connectivity) mode is enabled */
+  boolean isAdbcModeEnabled();
+
+  /** Returns whether Arrow streaming should be used exclusively (no JDBC fallback) */
+  boolean isArrowStreamingOnly();
+
+  /** Returns the ADBC API version compliance level */
+  String getAdbcApiVersion();
+
+  /** Returns whether native Arrow streaming is supported by the connection */
+  boolean supportsNativeArrowStreaming();
 }

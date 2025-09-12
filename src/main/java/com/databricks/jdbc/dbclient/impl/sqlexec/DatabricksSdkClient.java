@@ -269,7 +269,7 @@ public class DatabricksSdkClient implements IDatabricksClient {
     if (responseState != StatementState.SUCCEEDED) {
       handleFailedExecution(response, statementId, sql);
     }
-    return new DatabricksResultSet(
+    return DatabricksResultSetFactory.createFromSeaResponse(
         response.getStatus(),
         typedStatementId,
         response.getResult(),

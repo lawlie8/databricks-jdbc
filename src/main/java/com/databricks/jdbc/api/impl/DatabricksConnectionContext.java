@@ -1035,4 +1035,33 @@ public class DatabricksConnectionContext implements IDatabricksConnectionContext
   public boolean isBatchedInsertsEnabled() {
     return getParameter(DatabricksJdbcUrlParams.ENABLE_BATCHED_INSERTS).equals("1");
   }
+
+  // ADBC (Arrow Database Connectivity) Configuration
+
+  @Override
+  public boolean isAdbcModeEnabled() {
+    return getParameter(DatabricksJdbcUrlParams.ENABLE_ADBC_MODE).equals("1");
+  }
+
+  @Override
+  public boolean isArrowStreamingOnly() {
+    return getParameter(DatabricksJdbcUrlParams.ARROW_STREAMING_ONLY).equals("1");
+  }
+
+  @Override
+  public String getAdbcApiVersion() {
+    return getParameter(DatabricksJdbcUrlParams.ADBC_API_VERSION);
+  }
+
+  @Override
+  public boolean supportsNativeArrowStreaming() {
+    // Native Arrow streaming is supported when:
+    // 1. ADBC mode is enabled
+    // 2. We're using a client that supports Arrow (not pure Thrift inline)
+    // 3. Complex datatype support is enabled (as it indicates Arrow capability)
+    return isAdbcModeEnabled()
+        && (clientType == DatabricksClientType.SEA_CLIENT
+            || (!getParameter(DatabricksJdbcUrlParams.USE_THRIFT_CLIENT).equals("0")
+                && isComplexDatatypeSupportEnabled()));
+  }
 }

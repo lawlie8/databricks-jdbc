@@ -158,7 +158,13 @@ public enum DatabricksJdbcUrlParams {
   ENABLE_SQL_VALIDATION_FOR_IS_VALID(
       "EnableSQLValidationForIsValid",
       "Enable SQL query execution for connection validation in isValid() method",
-      "0");
+      "0"),
+
+  // ADBC (Arrow Database Connectivity) Parameters
+  ENABLE_ADBC_MODE("EnableAdbcMode", "Enable ADBC (Arrow Database Connectivity) mode", "0"),
+  ARROW_STREAMING_ONLY(
+      "ArrowStreamingOnly", "Use Arrow streaming exclusively (no JDBC fallback)", "0"),
+  ADBC_API_VERSION("AdbcApiVersion", "ADBC API version compliance level", "1.1.0");
 
   private final String paramName;
   private final String defaultValue;

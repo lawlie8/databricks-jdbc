@@ -44,6 +44,9 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
+import org.apache.arrow.flight.ArrowFlightReader;
+import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.http.entity.InputStreamEntity;
 
 public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksResultSetInternal {
@@ -60,7 +63,7 @@ public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksRes
   protected static final String AFFECTED_ROWS_COUNT = "num_affected_rows";
   private final ExecutionStatus executionStatus;
   private final StatementId statementId;
-  private final IExecutionResult executionResult;
+  protected final IExecutionResult executionResult;
   private final DatabricksResultSetMetaData resultSetMetaData;
   private final StatementType statementType;
   private final IDatabricksStatementInternal parentStatement;
@@ -70,7 +73,7 @@ public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksRes
   private boolean wasNull;
   private boolean silenceNonTerminalExceptions = false;
 
-  private ResultSetType resultSetType = ResultSetType.UNASSIGNED;
+  protected ResultSetType resultSetType = ResultSetType.UNASSIGNED;
 
   private boolean complexDatatypeSupport = false;
 
@@ -1974,6 +1977,36 @@ public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksRes
       return bigDecimal;
     }
     return bigDecimal.setScale(scale, RoundingMode.HALF_UP);
+  }
+
+  // ADBC (Arrow Database Connectivity) Extensions - Default implementations
+
+  @Override
+  public boolean supportsArrowStreaming() throws SQLException {
+    checkIfClosed();
+    // Base implementation returns false - subclasses can override for ADBC support
+    return false;
+  }
+
+  @Override
+  public Stream<VectorSchemaRoot> getArrowStream() throws SQLException {
+    checkIfClosed();
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "Arrow streaming not supported in standard JDBC mode. Use AdbcDatabricksResultSet for ADBC functionality.");
+  }
+
+  @Override
+  public ArrowFlightReader getArrowReader() throws SQLException {
+    checkIfClosed();
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "Arrow reader not supported in standard JDBC mode. Use AdbcDatabricksResultSet for ADBC functionality.");
+  }
+
+  @Override
+  public boolean isAdbcMode() throws SQLException {
+    checkIfClosed();
+    // Base implementation is always standard JDBC mode
+    return false;
   }
 
   @Override
