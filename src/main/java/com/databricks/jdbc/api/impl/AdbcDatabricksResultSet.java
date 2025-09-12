@@ -1,6 +1,8 @@
 package com.databricks.jdbc.api.impl;
 
 import com.databricks.jdbc.api.IDatabricksResultSet;
+import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
+import com.databricks.jdbc.api.impl.adbc.ArrowIpcStreamIterator;
 import com.databricks.jdbc.api.impl.arrow.ArrowStreamResult;
 import com.databricks.jdbc.api.internal.IDatabricksSession;
 import com.databricks.jdbc.api.internal.IDatabricksStatementInternal;
@@ -15,6 +17,7 @@ import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
 import com.databricks.jdbc.model.core.StatementStatus;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
+import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.Spliterator;
@@ -22,6 +25,7 @@ import java.util.Spliterators;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.apache.arrow.flight.ArrowFlightReader;
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import com.databricks.jdbc.api.impl.arrow.AbstractArrowResultChunk;
 import com.databricks.jdbc.api.impl.arrow.ChunkProvider;
@@ -141,6 +145,66 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
   public boolean isAdbcMode() throws SQLException {
     checkIfClosed();
     return adbcModeEnabled;
+  }
+
+  @Override
+  public IArrowIpcStreamIterator getArrowIpcIterator() throws SQLException {
+    checkIfClosed();
+
+    if (!supportsArrowIpcStreaming()) {
+      throw new DatabricksSQLFeatureNotSupportedException(
+          "ArrowIPC streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.",
+          DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
+          false);
+    }
+
+    try {
+      ArrowStreamResult arrowResult = (ArrowStreamResult) getExecutionResult();
+      
+      // Get allocator from session context or create one
+      BufferAllocator allocator = getArrowAllocator();
+      
+      // Create ArrowIPC iterator from the arrow stream result
+      return ArrowIpcStreamIterator.fromArrowStreamResult(arrowResult, allocator);
+      
+    } catch (Exception e) {
+      LOGGER.error("Failed to create ArrowIPC stream iterator", e);
+      throw new DatabricksSQLException("Error creating ArrowIPC stream iterator", e);
+    }
+  }
+
+  @Override
+  public ByteBuffer getArrowSchemaIpc() throws SQLException {
+    checkIfClosed();
+
+    if (!supportsArrowIpcStreaming()) {
+      throw new DatabricksSQLFeatureNotSupportedException(
+          "ArrowIPC streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.",
+          DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
+          false);
+    }
+
+    try {
+      // Create a temporary IPC iterator to get the schema
+      try (IArrowIpcStreamIterator iterator = getArrowIpcIterator()) {
+        return iterator.getSchemaIpc();
+      }
+      
+    } catch (Exception e) {
+      LOGGER.error("Failed to get Arrow schema in IPC format", e);
+      throw new DatabricksSQLException("Error serializing Arrow schema to IPC format", e);
+    }
+  }
+
+  @Override
+  public boolean supportsArrowIpcStreaming() throws SQLException {
+    checkIfClosed();
+    
+    // ArrowIPC streaming is supported when:
+    // 1. Basic Arrow streaming is supported
+    // 2. ADBC mode is enabled (IPC is an ADBC-specific feature)
+    // 3. We have access to the underlying execution result
+    return supportsArrowStreaming() && adbcModeEnabled && (getExecutionResult() != null);
   }
 
   /**
@@ -453,6 +517,22 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
     // We need to access the parent's resultSetType field
     // This would require making it protected in the parent class or adding a getter
     return super.resultSetType;
+  }
+
+  /**
+   * Gets or creates an Arrow BufferAllocator for IPC operations.
+   * This method provides access to memory allocation for Arrow operations.
+   */
+  private BufferAllocator getArrowAllocator() {
+    // In a full implementation, this would get the allocator from the session
+    // or connection context. For now, we'll need to access it through the
+    // existing Arrow infrastructure or create a child allocator.
+    // This is a placeholder that would need to be implemented based on
+    // the actual memory management strategy in the driver.
+    
+    // TODO: Implement proper allocator access from session context
+    throw new UnsupportedOperationException(
+        "Arrow allocator access needs to be implemented based on driver's memory management");
   }
 
   @Override

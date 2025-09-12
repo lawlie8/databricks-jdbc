@@ -45,9 +45,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
+import java.nio.ByteBuffer;
 import org.apache.arrow.flight.ArrowFlightReader;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.http.entity.InputStreamEntity;
+import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 
 public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksResultSetInternal {
 
@@ -2006,6 +2008,31 @@ public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksRes
   public boolean isAdbcMode() throws SQLException {
     checkIfClosed();
     // Base implementation is always standard JDBC mode
+    return false;
+  }
+
+  @Override
+  public IArrowIpcStreamIterator getArrowIpcIterator() throws SQLException {
+    checkIfClosed();
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "ArrowIPC streaming is not supported in standard JDBC mode. Use AdbcDatabricksResultSet with ADBC mode enabled.",
+        DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
+        false);
+  }
+
+  @Override
+  public ByteBuffer getArrowSchemaIpc() throws SQLException {
+    checkIfClosed();
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "ArrowIPC schema access is not supported in standard JDBC mode. Use AdbcDatabricksResultSet with ADBC mode enabled.",
+        DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
+        false);
+  }
+
+  @Override
+  public boolean supportsArrowIpcStreaming() throws SQLException {
+    checkIfClosed();
+    // Base implementation does not support ArrowIPC streaming
     return false;
   }
 

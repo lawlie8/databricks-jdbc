@@ -164,7 +164,13 @@ public enum DatabricksJdbcUrlParams {
   ENABLE_ADBC_MODE("EnableAdbcMode", "Enable ADBC (Arrow Database Connectivity) mode", "0"),
   ARROW_STREAMING_ONLY(
       "ArrowStreamingOnly", "Use Arrow streaming exclusively (no JDBC fallback)", "0"),
-  ADBC_API_VERSION("AdbcApiVersion", "ADBC API version compliance level", "1.1.0");
+  ADBC_API_VERSION("AdbcApiVersion", "ADBC API version compliance level", "1.1.0"),
+  
+  // ArrowIPC Streaming Parameters
+  ADBC_BUFFER_SIZE("AdbcBufferSize", "Buffer size for ArrowIPC message serialization (bytes)", "65536"),
+  ADBC_PREFETCH_BATCHES("AdbcPrefetchBatches", "Number of record batches to prefetch for ArrowIPC streaming", "2"),
+  ADBC_ZERO_COPY_ENABLED("AdbcZeroCopyEnabled", "Enable zero-copy optimizations for ArrowIPC streaming", "1"),
+  ADBC_IPC_COMPRESSION("AdbcIpcCompression", "Compression codec for ArrowIPC messages (none, lz4, zstd)", "none");
 
   private final String paramName;
   private final String defaultValue;
