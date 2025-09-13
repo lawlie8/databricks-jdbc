@@ -184,7 +184,7 @@ public abstract class AbstractArrowResultChunk {
    *
    * @return number of record batches
    */
-  protected int getRecordBatchCountInChunk() {
+  public int getRecordBatchCountInChunk() {
     return getStatus() == ChunkStatus.PROCESSING_SUCCEEDED ? recordBatchList.size() : 0;
   }
 
@@ -193,7 +193,7 @@ public abstract class AbstractArrowResultChunk {
    *
    * @return List of record batches
    */
-  protected List<List<ValueVector>> getRecordBatchList() {
+  public List<List<ValueVector>> getRecordBatches() {
     return recordBatchList;
   }
 

@@ -1,15 +1,14 @@
 package com.databricks.jdbc.api;
 
+import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 import com.databricks.jdbc.model.core.StatementStatus;
+import java.nio.ByteBuffer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Struct;
 import java.util.Map;
 import java.util.stream.Stream;
-import java.nio.ByteBuffer;
-import org.apache.arrow.flight.ArrowFlightReader;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 
 /**
  * Extends the standard JDBC {@link ResultSet} interface to provide Databricks-specific
@@ -124,19 +123,6 @@ public interface IDatabricksResultSet extends ResultSet {
   Stream<VectorSchemaRoot> getArrowStream() throws SQLException;
 
   /**
-   * Returns an ArrowFlightReader for streaming access to the result set data. This provides the
-   * most direct access to Arrow data with minimal conversion overhead.
-   *
-   * <p>The returned reader must be closed by the caller to free resources. This method is only
-   * available when {@link #supportsArrowStreaming()} returns true.
-   *
-   * @return an ArrowFlightReader for streaming the result data
-   * @throws SQLException if Arrow streaming is not supported or a database access error occurs
-   * @throws UnsupportedOperationException if ADBC mode is not enabled
-   */
-  ArrowFlightReader getArrowReader() throws SQLException;
-
-  /**
    * Returns whether this result set is operating in ADBC (Arrow Database Connectivity) mode. In
    * ADBC mode, the result set prioritizes Arrow-native operations and may have different
    * performance characteristics compared to standard JDBC mode.
@@ -150,21 +136,22 @@ public interface IDatabricksResultSet extends ResultSet {
 
   /**
    * Returns an ArrowIPC stream iterator for direct access to Arrow IPC messages.
-   * 
-   * <p>This provides the most direct access to Arrow data in its native IPC format,
-   * enabling zero-copy streaming of columnar data. Each iteration returns a ByteBuffer
-   * containing a complete Arrow IPC message (record batch).
-   * 
+   *
+   * <p>This provides the most direct access to Arrow data in its native IPC format, enabling
+   * zero-copy streaming of columnar data. Each iteration returns a ByteBuffer containing a complete
+   * Arrow IPC message (record batch).
+   *
    * <p>The iterator follows Arrow IPC streaming format:
+   *
    * <ul>
-   *   <li>Schema is available via {@link IArrowIpcStreamIterator#getSchema()}</li>
-   *   <li>Each {@link IArrowIpcStreamIterator#next()} returns a record batch message</li>
-   *   <li>Messages are in Arrow IPC wire format ready for inter-process communication</li>
+   *   <li>Schema is available via {@link IArrowIpcStreamIterator#getSchema()}
+   *   <li>Each {@link IArrowIpcStreamIterator#next()} returns a record batch message
+   *   <li>Messages are in Arrow IPC wire format ready for inter-process communication
    * </ul>
-   * 
-   * <p>This method is only available when {@link #supportsArrowStreaming()} returns true.
-   * The returned iterator must be closed by the caller to free resources.
-   * 
+   *
+   * <p>This method is only available when {@link #supportsArrowStreaming()} returns true. The
+   * returned iterator must be closed by the caller to free resources.
+   *
    * @return an IArrowIpcStreamIterator for streaming Arrow IPC messages
    * @throws SQLException if ArrowIPC streaming is not supported or a database access error occurs
    * @throws UnsupportedOperationException if ADBC mode is not enabled
@@ -173,14 +160,14 @@ public interface IDatabricksResultSet extends ResultSet {
 
   /**
    * Returns the Arrow schema in IPC format as a ByteBuffer.
-   * 
-   * <p>This provides direct access to the schema message in Arrow IPC format,
-   * which contains the complete schema information including column names, types,
-   * and metadata. The returned ByteBuffer contains a serialized Arrow IPC schema message
-   * that can be used for interoperability with other Arrow-compatible systems.
-   * 
+   *
+   * <p>This provides direct access to the schema message in Arrow IPC format, which contains the
+   * complete schema information including column names, types, and metadata. The returned
+   * ByteBuffer contains a serialized Arrow IPC schema message that can be used for interoperability
+   * with other Arrow-compatible systems.
+   *
    * <p>This method is only available when {@link #supportsArrowStreaming()} returns true.
-   * 
+   *
    * @return ByteBuffer containing the schema in Arrow IPC format
    * @throws SQLException if ArrowIPC streaming is not supported or a database access error occurs
    * @throws UnsupportedOperationException if ADBC mode is not enabled
@@ -189,12 +176,12 @@ public interface IDatabricksResultSet extends ResultSet {
 
   /**
    * Returns whether this result set supports ArrowIPC message streaming.
-   * 
-   * <p>This is a more specific check than {@link #supportsArrowStreaming()}, indicating
-   * whether direct IPC message access is available through {@link #getArrowIpcIterator()}
-   * and {@link #getArrowSchemaIpc()}. IPC support requires both Arrow streaming capability
-   * and the ability to serialize data to Arrow IPC wire format.
-   * 
+   *
+   * <p>This is a more specific check than {@link #supportsArrowStreaming()}, indicating whether
+   * direct IPC message access is available through {@link #getArrowIpcIterator()} and {@link
+   * #getArrowSchemaIpc()}. IPC support requires both Arrow streaming capability and the ability to
+   * serialize data to Arrow IPC wire format.
+   *
    * @return true if ArrowIPC message streaming is supported, false otherwise
    * @throws SQLException if a database access error occurs
    */

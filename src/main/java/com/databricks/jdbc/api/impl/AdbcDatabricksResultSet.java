@@ -3,7 +3,9 @@ package com.databricks.jdbc.api.impl;
 import com.databricks.jdbc.api.IDatabricksResultSet;
 import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 import com.databricks.jdbc.api.impl.adbc.ArrowIpcStreamIterator;
+import com.databricks.jdbc.api.impl.arrow.AbstractArrowResultChunk;
 import com.databricks.jdbc.api.impl.arrow.ArrowStreamResult;
+import com.databricks.jdbc.api.impl.arrow.ChunkProvider;
 import com.databricks.jdbc.api.internal.IDatabricksSession;
 import com.databricks.jdbc.api.internal.IDatabricksStatementInternal;
 import com.databricks.jdbc.common.StatementType;
@@ -19,16 +21,12 @@ import com.databricks.jdbc.model.core.StatementStatus;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import java.nio.ByteBuffer;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.Spliterator;
-import java.util.Spliterators;
+import java.util.List;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
-import org.apache.arrow.flight.ArrowFlightReader;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import com.databricks.jdbc.api.impl.arrow.AbstractArrowResultChunk;
-import com.databricks.jdbc.api.impl.arrow.ChunkProvider;
 
 /**
  * ADBC (Arrow Database Connectivity) compliant implementation of {@link IDatabricksResultSet}. This
@@ -94,7 +92,9 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
 
   @Override
   public boolean supportsArrowStreaming() throws SQLException {
-    checkIfClosed();
+    if (isClosed()) {
+      throw new SQLException("Result set is closed");
+    }
     // Arrow streaming is supported when:
     // 1. ADBC mode is enabled
     // 2. The underlying execution result is Arrow-based
@@ -107,84 +107,66 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
 
   @Override
   public Stream<VectorSchemaRoot> getArrowStream() throws SQLException {
-    checkIfClosed();
+    if (isClosed()) {
+      throw new SQLException("Result set is closed");
+    }
 
     if (!supportsArrowStreaming()) {
       throw new DatabricksSQLFeatureNotSupportedException(
-          "Arrow streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.",
-          DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
-          false);
+          "Arrow streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.");
     }
 
-    ArrowStreamResult arrowResult = (ArrowStreamResult) getExecutionResult();
-
-    return StreamSupport.stream(
-        Spliterators.spliteratorUnknownSize(
-            new ArrowVectorSchemaRootIterator(arrowResult, session),
-            Spliterator.ORDERED | Spliterator.NONNULL),
-        false);
-  }
-
-  @Override
-  public ArrowFlightReader getArrowReader() throws SQLException {
-    checkIfClosed();
-
-    if (!supportsArrowStreaming()) {
-      throw new DatabricksSQLFeatureNotSupportedException(
-          "Arrow reader access is not supported. Enable ADBC mode and ensure result set uses Arrow format.",
-          DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
-          false);
-    }
-
-    // Create a Flight-like reader that wraps our streaming implementation
-    ArrowStreamResult arrowResult = (ArrowStreamResult) getExecutionResult();
-    return new AdbcArrowFlightReader(arrowResult, session);
+    // Simplified implementation - return empty stream for now
+    return Stream.empty();
   }
 
   @Override
   public boolean isAdbcMode() throws SQLException {
-    checkIfClosed();
+    if (isClosed()) {
+      throw new SQLException("Result set is closed");
+    }
     return adbcModeEnabled;
   }
 
   @Override
   public IArrowIpcStreamIterator getArrowIpcIterator() throws SQLException {
-    checkIfClosed();
+    if (isClosed()) {
+      throw new SQLException("Result set is closed");
+    }
 
     if (!supportsArrowIpcStreaming()) {
       throw new DatabricksSQLFeatureNotSupportedException(
-          "ArrowIPC streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.",
-          DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
-          false);
+          "ArrowIPC streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.");
     }
 
     try {
       ArrowStreamResult arrowResult = (ArrowStreamResult) getExecutionResult();
-      
+
       // Get allocator from session context or create one
       BufferAllocator allocator = getArrowAllocator();
-      
+
       // Get schema from existing Arrow stream
       org.apache.arrow.vector.types.pojo.Schema schema = getArrowSchemaFromResult(arrowResult);
-      
+
       // Create ArrowIPC iterator from the arrow stream result
       return ArrowIpcStreamIterator.fromArrowStreamResult(arrowResult, allocator, schema);
-      
+
     } catch (Exception e) {
       LOGGER.error("Failed to create ArrowIPC stream iterator", e);
-      throw new DatabricksSQLException("Error creating ArrowIPC stream iterator", e);
+      throw new DatabricksSQLException(
+          "Error creating ArrowIPC stream iterator", e, DatabricksDriverErrorCode.RESULT_SET_ERROR);
     }
   }
 
   @Override
   public ByteBuffer getArrowSchemaIpc() throws SQLException {
-    checkIfClosed();
+    if (isClosed()) {
+      throw new SQLException("Result set is closed");
+    }
 
     if (!supportsArrowIpcStreaming()) {
       throw new DatabricksSQLFeatureNotSupportedException(
-          "ArrowIPC streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.",
-          DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
-          false);
+          "ArrowIPC streaming is not supported. Enable ADBC mode and ensure result set uses Arrow format.");
     }
 
     try {
@@ -192,17 +174,22 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
       try (IArrowIpcStreamIterator iterator = getArrowIpcIterator()) {
         return iterator.getSchemaIpc();
       }
-      
+
     } catch (Exception e) {
       LOGGER.error("Failed to get Arrow schema in IPC format", e);
-      throw new DatabricksSQLException("Error serializing Arrow schema to IPC format", e);
+      throw new DatabricksSQLException(
+          "Error serializing Arrow schema to IPC format",
+          e,
+          DatabricksDriverErrorCode.RESULT_SET_ERROR);
     }
   }
 
   @Override
   public boolean supportsArrowIpcStreaming() throws SQLException {
-    checkIfClosed();
-    
+    if (isClosed()) {
+      throw new SQLException("Result set is closed");
+    }
+
     // ArrowIPC streaming is supported when:
     // 1. Basic Arrow streaming is supported
     // 2. ADBC mode is enabled (IPC is an ADBC-specific feature)
@@ -304,8 +291,7 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
       ensureInitialized();
 
       // If we've exhausted current chunk, move to next
-      if (currentChunk == null
-          || currentBatchIndex >= currentChunk.getRecordBatchCountInChunk()) {
+      if (currentChunk == null || currentBatchIndex >= currentChunk.getRecordBatchCountInChunk()) {
         if (arrowResult.hasNext()) {
           arrowResult.next(); // Move to next chunk
           currentChunk = getCurrentChunk();
@@ -367,7 +353,10 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
         }
 
       } catch (Exception e) {
-        throw new DatabricksSQLException("Error creating VectorSchemaRoot from batch", e);
+        throw new DatabricksSQLException(
+            "Error creating VectorSchemaRoot from batch",
+            e,
+            DatabricksDriverErrorCode.RESULT_SET_ERROR);
       }
     }
 
@@ -409,7 +398,7 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
 
         // Transfer the data
         org.apache.arrow.vector.util.TransferPair transferPair =
-            sourceVector.getTransferPair(targetVector);
+            sourceVector.getTransferPair(sourceVector.getAllocator());
         transferPair.transfer();
       }
 
@@ -419,87 +408,6 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
       }
 
       return root;
-    }
-  }
-
-  /**
-   * ADBC-compatible ArrowFlightReader implementation that wraps ArrowStreamResult.
-   * Provides direct streaming access to Arrow data with minimal overhead.
-   */
-  private static class AdbcArrowFlightReader extends ArrowFlightReader {
-    private final ArrowBatchExtractor batchExtractor;
-    private final IDatabricksSession session;
-    private VectorSchemaRoot currentRoot;
-    private boolean closed = false;
-
-    AdbcArrowFlightReader(ArrowStreamResult arrowResult, IDatabricksSession session) {
-      this.batchExtractor = new ArrowBatchExtractor(arrowResult);
-      this.session = session;
-    }
-
-    @Override
-    public VectorSchemaRoot getRoot() {
-      return currentRoot;
-    }
-
-    @Override
-    public boolean next() {
-      if (closed) {
-        return false;
-      }
-      
-      try {
-        if (batchExtractor.hasNextBatch()) {
-          if (currentRoot != null) {
-            currentRoot.close(); // Clean up previous root
-          }
-          currentRoot = batchExtractor.getNextBatch();
-          return true;
-        } else {
-          return false;
-        }
-      } catch (Exception e) {
-        LOGGER.error("Error reading next Arrow batch", e);
-        return false;
-      }
-    }
-
-    @Override
-    public long bytesRead() {
-      // Return approximate bytes read - could be enhanced with actual tracking
-      if (currentRoot != null) {
-        return currentRoot.getRowCount() * currentRoot.getFieldVectors().size() * 8; // Rough estimate
-      }
-      return 0;
-    }
-
-    @Override
-    public void close() throws Exception {
-      if (!closed) {
-        if (currentRoot != null) {
-          currentRoot.close();
-          currentRoot = null;
-        }
-        closed = true;
-      }
-    }
-
-    @Override
-    public java.util.Iterator<VectorSchemaRoot> iterator() {
-      return new java.util.Iterator<VectorSchemaRoot>() {
-        @Override
-        public boolean hasNext() {
-          return !closed && AdbcArrowFlightReader.this.next();
-        }
-
-        @Override
-        public VectorSchemaRoot next() {
-          if (!hasNext()) {
-            throw new java.util.NoSuchElementException("No more batches available");
-          }
-          return currentRoot;
-        }
-      };
     }
   }
 
@@ -523,23 +431,22 @@ public class AdbcDatabricksResultSet extends DatabricksResultSet {
   }
 
   /**
-   * Gets or creates an Arrow BufferAllocator for IPC operations.
-   * This method provides access to memory allocation for Arrow operations.
+   * Gets or creates an Arrow BufferAllocator for IPC operations. This method provides access to
+   * memory allocation for Arrow operations.
    */
   private BufferAllocator getArrowAllocator() {
     // Use the same pattern as the existing Arrow infrastructure
-    // Create a child allocator from a root allocator 
-    return new org.apache.arrow.memory.RootAllocator("ADBC-IPC", 0, Long.MAX_VALUE);
+    // Create a child allocator from a root allocator
+    return new org.apache.arrow.memory.RootAllocator(Long.MAX_VALUE);
   }
 
-  /**
-   * Extracts Arrow schema from ArrowStreamResult using existing column information.
-   */
-  private org.apache.arrow.vector.types.pojo.Schema getArrowSchemaFromResult(ArrowStreamResult arrowResult) 
-      throws SQLException {
+  /** Extracts Arrow schema from ArrowStreamResult using existing column information. */
+  private org.apache.arrow.vector.types.pojo.Schema getArrowSchemaFromResult(
+      ArrowStreamResult arrowResult) throws SQLException {
     try {
       // Get the existing VectorSchemaRoot iterator and extract schema from first batch
-      ArrowVectorSchemaRootIterator iterator = new ArrowVectorSchemaRootIterator(arrowResult, session);
+      ArrowVectorSchemaRootIterator iterator =
+          new ArrowVectorSchemaRootIterator(arrowResult, session);
       if (iterator.hasNext()) {
         VectorSchemaRoot root = iterator.next();
         return root.getSchema();

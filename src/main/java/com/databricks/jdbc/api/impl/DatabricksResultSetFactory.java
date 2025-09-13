@@ -34,7 +34,7 @@ public class DatabricksResultSetFactory {
    * Creates a DatabricksResultSet from SEA (SQL Execution API) response. Chooses between standard
    * JDBC and ADBC implementations based on session configuration.
    */
-  public static IDatabricksResultSet createFromSeaResponse(
+  public static DatabricksResultSet createFromSeaResponse(
       StatementStatus statementStatus,
       StatementId statementId,
       ResultData resultData,
@@ -77,7 +77,7 @@ public class DatabricksResultSetFactory {
    * Creates a DatabricksResultSet from Thrift response. Chooses between standard JDBC and ADBC
    * implementations based on session configuration.
    */
-  public static IDatabricksResultSet createFromThriftResponse(
+  public static DatabricksResultSet createFromThriftResponse(
       StatementStatus statementStatus,
       StatementId statementId,
       TFetchResultsResp resultsResp,
@@ -103,10 +103,10 @@ public class DatabricksResultSetFactory {
   }
 
   /**
-   * Creates a DatabricksResultSet from Thrift accessor (simpler signature).
-   * Used by DatabricksThriftAccessor for synchronous execution.
+   * Creates a DatabricksResultSet from Thrift accessor (simpler signature). Used by
+   * DatabricksThriftAccessor for synchronous execution.
    */
-  public static IDatabricksResultSet createFromThriftAccessor(
+  public static DatabricksResultSet createFromThriftAccessor(
       StatementStatus statementStatus,
       StatementId statementId,
       TFetchResultsResp resultsResp,

@@ -1060,7 +1060,7 @@ public class DatabricksConnectionContext implements IDatabricksConnectionContext
     // 2. We're using a client that supports Arrow (not pure Thrift inline)
     // 3. Complex datatype support is enabled (as it indicates Arrow capability)
     return isAdbcModeEnabled()
-        && (clientType == DatabricksClientType.SEA_CLIENT
+        && (clientType == DatabricksClientType.SEA
             || (!getParameter(DatabricksJdbcUrlParams.USE_THRIFT_CLIENT).equals("0")
                 && isComplexDatatypeSupportEnabled()));
   }

@@ -2,8 +2,10 @@ package com.databricks.jdbc.api.impl;
 
 import com.databricks.jdbc.api.IDatabricksResultSet;
 import com.databricks.jdbc.api.IExecutionStatus;
+import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 import com.databricks.jdbc.api.internal.IDatabricksResultSetInternal;
 import com.databricks.jdbc.exception.DatabricksSQLException;
+import com.databricks.jdbc.exception.DatabricksSQLFeatureNotSupportedException;
 import com.databricks.jdbc.model.core.StatementStatus;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.sdk.service.sql.StatementState;
@@ -11,9 +13,12 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.math.BigDecimal;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.sql.*;
 import java.util.Calendar;
 import java.util.Map;
+import java.util.stream.Stream;
+import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.http.entity.InputStreamEntity;
 
 /** Empty implementation of ResultSet */
@@ -1179,5 +1184,39 @@ public class EmptyResultSet
   @Override
   public void unsetSilenceNonTerminalExceptions() {
     // do nothing
+  }
+
+  // ADBC methods
+  @Override
+  public boolean supportsArrowStreaming() throws SQLException {
+    return false;
+  }
+
+  @Override
+  public Stream<VectorSchemaRoot> getArrowStream() throws SQLException {
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "Arrow streaming not supported on empty result set");
+  }
+
+  @Override
+  public boolean isAdbcMode() throws SQLException {
+    return false;
+  }
+
+  @Override
+  public IArrowIpcStreamIterator getArrowIpcIterator() throws SQLException {
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "ArrowIPC streaming not supported on empty result set");
+  }
+
+  @Override
+  public ByteBuffer getArrowSchemaIpc() throws SQLException {
+    throw new DatabricksSQLFeatureNotSupportedException(
+        "ArrowIPC schema not supported on empty result set");
+  }
+
+  @Override
+  public boolean supportsArrowIpcStreaming() throws SQLException {
+    return false;
   }
 }

@@ -7,6 +7,7 @@ import static com.databricks.jdbc.common.util.DatabricksTypeUtil.STRUCT;
 
 import com.databricks.jdbc.api.IDatabricksResultSet;
 import com.databricks.jdbc.api.IExecutionStatus;
+import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 import com.databricks.jdbc.api.impl.arrow.ArrowStreamResult;
 import com.databricks.jdbc.api.impl.converters.ConverterHelper;
 import com.databricks.jdbc.api.impl.converters.ObjectConverter;
@@ -38,6 +39,7 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.sql.*;
 import java.time.*;
 import java.util.Calendar;
@@ -45,11 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
-import java.nio.ByteBuffer;
-import org.apache.arrow.flight.ArrowFlightReader;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.http.entity.InputStreamEntity;
-import com.databricks.jdbc.api.adbc.IArrowIpcStreamIterator;
 
 public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksResultSetInternal {
 
@@ -1998,13 +1997,6 @@ public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksRes
   }
 
   @Override
-  public ArrowFlightReader getArrowReader() throws SQLException {
-    checkIfClosed();
-    throw new DatabricksSQLFeatureNotSupportedException(
-        "Arrow reader not supported in standard JDBC mode. Use AdbcDatabricksResultSet for ADBC functionality.");
-  }
-
-  @Override
   public boolean isAdbcMode() throws SQLException {
     checkIfClosed();
     // Base implementation is always standard JDBC mode
@@ -2015,18 +2007,14 @@ public class DatabricksResultSet implements IDatabricksResultSet, IDatabricksRes
   public IArrowIpcStreamIterator getArrowIpcIterator() throws SQLException {
     checkIfClosed();
     throw new DatabricksSQLFeatureNotSupportedException(
-        "ArrowIPC streaming is not supported in standard JDBC mode. Use AdbcDatabricksResultSet with ADBC mode enabled.",
-        DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
-        false);
+        "ArrowIPC streaming is not supported in standard JDBC mode. Use AdbcDatabricksResultSet with ADBC mode enabled.");
   }
 
   @Override
   public ByteBuffer getArrowSchemaIpc() throws SQLException {
     checkIfClosed();
     throw new DatabricksSQLFeatureNotSupportedException(
-        "ArrowIPC schema access is not supported in standard JDBC mode. Use AdbcDatabricksResultSet with ADBC mode enabled.",
-        DatabricksDriverErrorCode.UNSUPPORTED_OPERATION,
-        false);
+        "ArrowIPC schema access is not supported in standard JDBC mode. Use AdbcDatabricksResultSet with ADBC mode enabled.");
   }
 
   @Override
