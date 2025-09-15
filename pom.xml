@@ -113,6 +113,11 @@
       <version>${arrow.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.arrow.adbc</groupId>
+      <artifactId>adbc-core</artifactId>
+      <version>0.8.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
       <version>${httpclient.version}</version>
