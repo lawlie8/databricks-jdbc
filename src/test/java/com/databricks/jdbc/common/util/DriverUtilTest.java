@@ -40,7 +40,7 @@ public class DriverUtilTest {
   @Test
   public void testGetDriverMinorVersion() {
     int minorVersion = DriverUtil.getDriverMinorVersion();
-    assertEquals(0, minorVersion);
+    assertEquals(1, minorVersion);
   }
 
   @Test
