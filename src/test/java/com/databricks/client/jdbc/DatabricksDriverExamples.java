@@ -1291,4 +1291,222 @@ public class DatabricksDriverExamples {
     rs.close();
     con.close();
   }
+
+  /**
+   * Demonstrates ADBC (Arrow Database Connectivity) mode execution. This example shows how to
+   * enable ADBC mode for high-performance Arrow-native query execution with direct Arrow batch
+   * access and zero-copy data processing.
+   */
+  @Test
+  void exampleAdbcMode() throws Exception {
+    // Register the Databricks JDBC driver
+    DriverManager.registerDriver(new Driver());
+
+    // Configure JDBC URL with ADBC mode enabled
+    String jdbcUrl =
+        JDBC_URL_WAREHOUSE
+            + "EnableTelemetry=1;"
+            + "EnableAdbcMode=1;"
+            + // Enable ADBC mode for Arrow-native execution
+            "enableArrow=1;"
+            + // Ensure Arrow format is enabled
+            "AdbcApiVersion=1.1.0"; // Specify ADBC API version
+
+    Connection con = DriverManager.getConnection(jdbcUrl, "token", DATABRICKS_TOKEN);
+    System.out.println("Connection established with ADBC mode enabled...");
+
+    // Cast to IDatabricksConnection to access ADBC-specific functionality
+    if (con instanceof IDatabricksConnection) {
+      IDatabricksConnection databricksConnection = (IDatabricksConnection) con;
+
+      // Verify ADBC mode is enabled
+      boolean adbcEnabled = databricksConnection.getConnectionContext().isAdbcModeEnabled();
+      System.out.println("ADBC Mode Enabled: " + adbcEnabled);
+
+      if (adbcEnabled) {
+        // Create ADBC-enabled statement
+        Statement stmt = con.createStatement();
+
+        // Execute a query with ADBC mode - this will use Arrow-native execution
+        System.out.println("Executing query with ADBC mode (Arrow-native execution)...");
+        ResultSet rs = stmt.executeQuery("SELECT 1 as id, 'hello' as message, 42.5 as value");
+
+        // The result set should be an AdbcDatabricksResultSet with Arrow capabilities
+        System.out.println("Result set type: " + rs.getClass().getSimpleName());
+
+        // Print results using standard JDBC interface
+        printResultSet(rs);
+
+        // If the result set supports ADBC features, demonstrate Arrow access
+        if (rs instanceof com.databricks.jdbc.api.impl.AdbcDatabricksResultSet) {
+          com.databricks.jdbc.api.impl.AdbcDatabricksResultSet adbcResultSet =
+              (com.databricks.jdbc.api.impl.AdbcDatabricksResultSet) rs;
+
+          System.out.println("ADBC Features:");
+          System.out.println(
+              "- Supports Arrow Streaming: " + adbcResultSet.supportsArrowStreaming());
+          System.out.println(
+              "- Supports Arrow IPC Streaming: " + adbcResultSet.supportsArrowIpcStreaming());
+          System.out.println("- ADBC Mode Active: " + adbcResultSet.isAdbcMode());
+
+          // Access Arrow-specific functionality
+          try {
+            var arrowIterator = adbcResultSet.getArrowIpcIterator();
+            System.out.println("Arrow IPC Iterator obtained successfully");
+            System.out.println("Has Schema: " + arrowIterator.hasSchema());
+
+            if (arrowIterator.hasSchema()) {
+              var schema = arrowIterator.getSchema();
+              System.out.println("Arrow Schema Fields: " + schema.getFields().size());
+              schema
+                  .getFields()
+                  .forEach(
+                      field ->
+                          System.out.println(
+                              "  - Field: " + field.getName() + " (" + field.getType() + ")"));
+            }
+          } catch (Exception e) {
+            System.out.println("Arrow access note: " + e.getMessage());
+          }
+        }
+
+        rs.close();
+        stmt.close();
+
+        // Demonstrate ADBC with a more complex query
+        System.out.println("\nExecuting complex query with ADBC mode...");
+        Statement stmt2 = con.createStatement();
+        ResultSet rs2 =
+            stmt2.executeQuery(
+                "SELECT "
+                    + "  CAST(1 as BIGINT) as big_number, "
+                    + "  CAST('2023-12-01' as DATE) as sample_date, "
+                    + "  CAST(123.456 as DECIMAL(10,3)) as decimal_value, "
+                    + "  ARRAY(1, 2, 3) as array_col, "
+                    + "  STRUCT('field1' as name, 42 as value) as struct_col");
+
+        printResultSet(rs2);
+        rs2.close();
+        stmt2.close();
+
+        System.out.println("ADBC mode execution completed successfully!");
+      } else {
+        System.out.println("ADBC mode was not enabled - check connection parameters");
+      }
+    }
+
+    con.close();
+  }
+
+  /**
+   * Demonstrates the new ADBC-specific APIs (DatabricksAdbcConnection and DatabricksAdbcStatement).
+   * This example shows how to use the native ADBC interfaces for direct Arrow database
+   * connectivity.
+   */
+  @Test
+  void exampleAdbcNativeApi() throws Exception {
+    // Register the Databricks JDBC driver
+    DriverManager.registerDriver(new Driver());
+
+    // Configure JDBC URL with ADBC mode enabled
+    String jdbcUrl =
+        JDBC_URL_WAREHOUSE
+            + "EnableTelemetry=1;"
+            + "EnableAdbcMode=1;"
+            + // Enable ADBC mode
+            "enableArrow=1;"
+            + // Ensure Arrow format is enabled
+            "AdbcApiVersion=1.1.0"; // Specify ADBC API version
+
+    Connection con = DriverManager.getConnection(jdbcUrl, "token", DATABRICKS_TOKEN);
+    System.out.println("Connection established with ADBC mode enabled...");
+
+    // Cast to IDatabricksConnection and create ADBC connection
+    if (con instanceof IDatabricksConnection) {
+      IDatabricksConnection databricksConnection = (IDatabricksConnection) con;
+
+      try {
+        // Create ADBC connection using our new implementation
+        com.databricks.jdbc.api.adbc.DatabricksAdbcConnection adbcConnection =
+            new com.databricks.jdbc.api.adbc.DatabricksAdbcConnection(
+                (com.databricks.jdbc.api.impl.DatabricksConnection) databricksConnection);
+
+        System.out.println("ADBC Connection created successfully");
+
+        // Create ADBC statement using the new API
+        org.apache.arrow.adbc.core.AdbcStatement adbcStatement = adbcConnection.createStatement();
+        System.out.println("ADBC Statement created successfully");
+
+        // Set SQL query using ADBC API
+        adbcStatement.setSqlQuery("SELECT 1 as id, 'ADBC Test' as message, 123.45 as value");
+
+        // Prepare the statement
+        adbcStatement.prepare();
+        System.out.println("ADBC Statement prepared successfully");
+
+        // Execute query using ADBC API - returns standard ADBC QueryResult
+        org.apache.arrow.adbc.core.AdbcStatement.QueryResult queryResult =
+            adbcStatement.executeQuery();
+        System.out.println("ADBC Query executed successfully");
+
+        // Access Arrow data directly through ADBC QueryResult
+        System.out.println("Affected rows: " + queryResult.getAffectedRows());
+
+        // Get ArrowReader for direct Arrow data access
+        org.apache.arrow.vector.ipc.ArrowReader arrowReader = queryResult.getReader();
+        System.out.println("ArrowReader obtained successfully");
+
+        // Read Arrow batches
+        try {
+          System.out.println("Reading Arrow batches...");
+          int batchCount = 0;
+          while (arrowReader.loadNextBatch()) {
+            batchCount++;
+            org.apache.arrow.vector.VectorSchemaRoot root = arrowReader.getVectorSchemaRoot();
+            System.out.println("Batch " + batchCount + ": " + root.getRowCount() + " rows");
+
+            // Print schema information
+            if (batchCount == 1) {
+              org.apache.arrow.vector.types.pojo.Schema schema = root.getSchema();
+              System.out.println("Arrow Schema:");
+              schema
+                  .getFields()
+                  .forEach(
+                      field ->
+                          System.out.println("  - " + field.getName() + ": " + field.getType()));
+            }
+          }
+          System.out.println("Total batches processed: " + batchCount);
+        } finally {
+          arrowReader.close();
+        }
+
+        // Clean up ADBC resources
+        queryResult.close();
+        adbcStatement.close();
+
+        // Test ADBC update operation
+        System.out.println("\nTesting ADBC update operation...");
+        org.apache.arrow.adbc.core.AdbcStatement updateStatement = adbcConnection.createStatement();
+        updateStatement.setSqlQuery(
+            "CREATE OR REPLACE TEMPORARY VIEW adbc_test AS SELECT 1 as test_col");
+        updateStatement.prepare();
+
+        org.apache.arrow.adbc.core.AdbcStatement.UpdateResult updateResult =
+            updateStatement.executeUpdate();
+        System.out.println("Update result - Affected rows: " + updateResult.getAffectedRows());
+
+        updateStatement.close();
+        adbcConnection.close();
+
+        System.out.println("ADBC Native API test completed successfully!");
+
+      } catch (Exception e) {
+        System.out.println("ADBC API Error: " + e.getMessage());
+        e.printStackTrace();
+      }
+    }
+
+    con.close();
+  }
 }

@@ -228,8 +228,7 @@ public class DatabricksQueryResult {
     @Override
     protected Schema readSchema() {
       try {
-        // Return the schema that was passed to this class
-        // TODO: Get actual schema from result set if available
+        // Return the schema that was passed from the Arrow iterator
         return schema;
       } catch (Exception e) {
         return null;

@@ -105,10 +105,12 @@ public class DatabricksAdbcStatement implements AdbcStatement {
       // Create Arrow stream iterator for direct batch access
       IArrowIpcStreamIterator arrowIterator = adbcResultSet.getArrowIpcIterator();
 
-      // For now, use a placeholder schema - actual implementation would parse from IPC
-      Schema schema = new Schema(java.util.Collections.emptyList());
+      // Get the actual Arrow schema from the iterator
+      Schema schema = arrowIterator.getSchema();
 
-      LOGGER.info("Query executed successfully with ADBC mode, returning direct Arrow batches.");
+      LOGGER.info(
+          "Query executed successfully with ADBC mode, returning direct Arrow batches. Schema: {} fields",
+          schema.getFields().size());
 
       // Create ArrowReader from the ADBC result set for ADBC compliance
       DatabricksQueryResult queryResult =
