@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.databricks.jdbc.api.IDatabricksConnection;
 import com.databricks.jdbc.api.IDatabricksResultSet;
 import com.databricks.jdbc.api.IDatabricksStatement;
+import com.databricks.jdbc.api.impl.DatabricksConnection;
 import com.databricks.jdbc.api.impl.DatabricksConnectionContextFactory;
 import com.databricks.jdbc.api.impl.DatabricksResultSetMetaData;
 import com.databricks.jdbc.api.impl.volume.DatabricksVolumeClientFactory;
@@ -49,12 +50,11 @@ import org.junit.jupiter.api.Test;
 public class DatabricksDriverExamples {
 
   private static final String JDBC_URL_WAREHOUSE =
-      "jdbc:databricks://sample-host.cloud.databricks.com:9999/default;"
-          + "transportMode=https;ssl=1;AuthMech=3;httpPath=/sql/1.0/warehouses/999999999999;";
+      "jdbc:databricks://e2-dogfood.staging.cloud.databricks.com:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=/sql/1.0/warehouses/83d7cfc29ddb1e00;";
   private static final String JDBC_URL_CLUSTER =
       "jdbc:databricks://sample-host.cloud.databricks.com:9999/default;"
           + "transportMode=http;ssl=1;httpPath=sql/protocolv1/o/9999999999999999/9999999999999999;AuthMech=3;";
-  private static final String DATABRICKS_TOKEN = System.getenv("DATABRICKS_EXAMPLE_TOKEN");
+  private static final String DATABRICKS_TOKEN = "";
 
   /**
    * Utility method to print the contents of a {@link ResultSet}. It displays column names, data
@@ -1320,7 +1320,7 @@ public class DatabricksDriverExamples {
       IDatabricksConnection databricksConnection = (IDatabricksConnection) con;
 
       // Verify ADBC mode is enabled
-      boolean adbcEnabled = databricksConnection.getConnectionContext().isAdbcModeEnabled();
+      boolean adbcEnabled = ((DatabricksConnection) databricksConnection).getConnectionContext().isAdbcModeEnabled();
       System.out.println("ADBC Mode Enabled: " + adbcEnabled);
 
       if (adbcEnabled) {
