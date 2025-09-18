@@ -51,6 +51,16 @@ jobs:
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
           test -f "target/databricks-jdbc-${VERSION}-thin.jar"
 
+      - name: Snapshot open Central repositories (pre-upload)
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          curl -s -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+            "https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?state=open" \
+            | grep -o '"key":"[^"]*"' | cut -d':' -f2 | tr -d '"' > pre_keys.txt
+          echo "Pre-upload open repos:"; cat pre_keys.txt | sed 's/^/  /'
+
       - name: Publish Thin JAR as Separate Artifact to Maven Central
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
@@ -73,15 +83,19 @@ jobs:
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          echo "Locating open staging repository..."
-          RESP=$(curl -s -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
-            "https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?state=open")
-          COUNT=$(echo "$RESP" | grep -o '"key":"[^"]*"' | wc -l | tr -d ' ')
-          if [ "$COUNT" -ne 1 ]; then
-            echo "Expected exactly 1 open repository, found $COUNT. Refusing to publish to avoid selecting the wrong repo.";
-            echo "$RESP"; exit 1;
-          fi
-          KEY=$(echo "$RESP" | grep -o '"key":"[^"]*"' | tail -1 | cut -d':' -f2 | tr -d '"')
-          echo "Publishing repo $KEY..."
+          echo "Finding the newly opened repo for databricks-jdbc-thin ${VERSION}..."
+          NEWKEY=""
+          for i in $(seq 1 12); do
+            curl -s -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+              "https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?state=open" \
+              | grep -o '"key":"[^"]*"' | cut -d':' -f2 | tr -d '"' > post_keys.txt
+            for k in $(cat post_keys.txt); do
+              if ! grep -qx "$k" pre_keys.txt; then NEWKEY="$k"; break; fi
+            done
+            if [ -n "$NEWKEY" ]; then break; fi
+            echo "Waiting for new repo to appear... ($i/12)"; sleep 5;
+          done
+          if [ -z "$NEWKEY" ]; then echo "Could not identify newly opened repository for thin upload."; echo "Open repos:"; cat post_keys.txt; exit 1; fi
+          echo "Publishing repo $NEWKEY..."
           curl -s -X POST -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
-            "https://ossrh-staging-api.central.sonatype.com/manual/upload/repository/${KEY}?publishing_type=user_managed" | cat
+            "https://ossrh-staging-api.central.sonatype.com/manual/upload/repository/${NEWKEY}?publishing_type=user_managed" | cat
