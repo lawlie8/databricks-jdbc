@@ -55,3 +55,17 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+      - name: Publish thin in Central (user-managed)
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          echo "Searching for open repo..."
+          RESP=$(curl -s -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+            "https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?state=open")
+          KEY=$(echo "$RESP" | grep -o '"key":"[^"]*"' | head -1 | cut -d':' -f2 | tr -d '"')
+          if [ -z "$KEY" ]; then echo "No open repo found"; echo "$RESP"; exit 1; fi
+          echo "Publishing repo $KEY..."
+          curl -s -X POST -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+            "https://ossrh-staging-api.central.sonatype.com/manual/upload/repository/${KEY}?publishing_type=user_managed" | cat
