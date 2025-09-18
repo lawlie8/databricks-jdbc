@@ -43,8 +43,4 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            target/databricks-jdbc-*-oss.jar
-            target/databricks-jdbc-*-sources.jar
-            target/databricks-jdbc-*-javadoc.jar
-          fail_on_unmatched_files: false
+           files: target/*.jar
