@@ -73,17 +73,15 @@ jobs:
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          echo "Searching for open repo..."
-          # Poll up to ~60s for the specific repo that contains our thin component to avoid publishing the wrong repo
-          KEY=""
-          for i in $(seq 1 12); do
-            COMP=$(curl -s -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
-              "https://ossrh-staging-api.central.sonatype.com/manual/search/components?namespace=com.databricks&name=databricks-jdbc-thin&version=${VERSION}")
-            KEY=$(echo "$COMP" | grep -o '"repository"\s*:\s*"[^"]*"' | head -1 | cut -d':' -f2 | tr -d '" ')
-            if [ -n "$KEY" ]; then break; fi
-            echo "Waiting for component to be indexed... ($i/12)"; sleep 5;
-          done
-          if [ -z "$KEY" ]; then echo "Could not find repository containing databricks-jdbc-thin:${VERSION}"; echo "$COMP"; exit 1; fi
+          echo "Locating open staging repository..."
+          RESP=$(curl -s -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+            "https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?state=open")
+          COUNT=$(echo "$RESP" | grep -o '"key":"[^"]*"' | wc -l | tr -d ' ')
+          if [ "$COUNT" -ne 1 ]; then
+            echo "Expected exactly 1 open repository, found $COUNT. Refusing to publish to avoid selecting the wrong repo.";
+            echo "$RESP"; exit 1;
+          fi
+          KEY=$(echo "$RESP" | grep -o '"key":"[^"]*"' | tail -1 | cut -d':' -f2 | tr -d '"')
           echo "Publishing repo $KEY..."
           curl -s -X POST -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
             "https://ossrh-staging-api.central.sonatype.com/manual/upload/repository/${KEY}?publishing_type=user_managed" | cat
