@@ -11,9 +11,10 @@
 - Implement lazy/incremental fetching for columnar results when using Databricks JDBC in Thrift mode without Arrow support. The change modifies the behavior from buffering entire result sets in memory to maintaining only a limited number of rows at a time, reducing peak heap memory usage and preventing OutOfMemory errors.
 - Added new artifact `databricks-jdbc-thin` for thin jar with runtime dependency metadata.
 - Introduce a memory-efficient columnar data access mechanism for JDBC result processing.
+- Added support for using a custom Discovery URL in U2M flows on AWS and GCP.
 
 ### Updated
-- Databricks SDK dependency upgraded to latest version 0.60.0
+- Databricks SDK dependency upgraded to latest version 0.64.0
 
 ### Fixed
 - Integrated Azure U2M flow into driver for improved stability.
