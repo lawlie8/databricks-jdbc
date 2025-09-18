@@ -25,10 +25,16 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
-      - name: Set up Maven 3.9.8
-        uses: s4u/setup-maven-action@v1.14.0
-        with:
-          maven-version: '3.9.8'
+      - name: Install Maven 3.9.8
+        run: |
+          set -euo pipefail
+          MAVEN_VERSION=3.9.8
+          echo "Installing Maven ${MAVEN_VERSION}..."
+          curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" -o maven.tgz
+          sudo tar -C /opt -xzf maven.tgz
+          echo "M2_HOME=/opt/apache-maven-${MAVEN_VERSION}" >> "$GITHUB_ENV"
+          echo "/opt/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
+          mvn -v | cat
 
       - name: Configure GPG
         run: |
