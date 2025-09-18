@@ -38,13 +38,13 @@ jobs:
       - name: Verify thin jar exists
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          test -f "target/databricks-jdbc-${VERSION}-oss-thin.jar"
+          test -f "target/databricks-jdbc-${VERSION}-thin.jar"
 
       - name: Publish Thin JAR as Separate Artifact to Maven Central
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
           mvn -Prelease gpg:sign-and-deploy-file \
-            -Dfile="target/databricks-jdbc-${VERSION}-oss-thin.jar" \
+            -Dfile="target/databricks-jdbc-${VERSION}-thin.jar" \
             -DrepositoryId=central \
             -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ \
             -DgroupId=com.databricks \
@@ -62,5 +62,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            target/*-oss-thin.jar
+            target/*-thin.jar
 
