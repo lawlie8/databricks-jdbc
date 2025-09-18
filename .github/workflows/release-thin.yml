@@ -33,7 +33,7 @@ jobs:
 
       - name: Build thin JAR
         run: |
-          mvn -B -DskipTests package
+          mvn -B -ntp -P release -DskipTests -Dgpg.skip=true clean package
 
       - name: Verify thin jar exists
         run: |
@@ -43,15 +43,13 @@ jobs:
       - name: Publish Thin JAR as Separate Artifact to Maven Central
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          mvn -Prelease gpg:sign-and-deploy-file \
+          mvn -Prelease org.apache.maven.plugins:maven-gpg-plugin:1.6:sign-and-deploy-file \
             -Dfile="target/databricks-jdbc-${VERSION}-thin.jar" \
+            -DpomFile="thin_public_pom.xml" \
+            -Dsources="target/databricks-jdbc-${VERSION}-sources.jar" \
+            -Djavadoc="target/databricks-jdbc-${VERSION}-javadoc.jar" \
             -DrepositoryId=central \
             -Durl=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/ \
-            -DgroupId=com.databricks \
-            -DartifactId=databricks-jdbc-thin \
-            -Dversion="${VERSION}" \
-            -Dpackaging=jar \
-            -DgeneratePom=true \
             -Dgpg.passphrase="${GPG_PASSPHRASE}"
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
