@@ -1050,4 +1050,10 @@ public class DatabricksConnectionContext implements IDatabricksConnectionContext
   public boolean getIgnoreTransactions() {
     return getParameter(DatabricksJdbcUrlParams.IGNORE_TRANSACTIONS, "0").equals("1");
   }
+
+  @Override
+  public TelemetryLogLevel getTelemetryLogLevel() {
+    return TelemetryLogLevel.parse(
+        getParameter(DatabricksJdbcUrlParams.TELEMETRY_LOG_LEVEL), TelemetryLogLevel.DEBUG);
+  }
 }

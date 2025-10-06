@@ -5,6 +5,7 @@ import java.sql.DriverPropertyInfo;
 /** Enum to hold all the Databricks JDBC URL parameters. */
 public enum DatabricksJdbcUrlParams {
   LOG_LEVEL("loglevel", "Log level for debugging"),
+  TELEMETRY_LOG_LEVEL("telemetryLogLevel", "Log level for telemetry logs", "DEBUG"),
   LOG_PATH("logpath", "Path to the log file"),
   LOG_FILE_SIZE("LogFileSize", "Maximum size of the log file", "10"), // 10 MB
   LOG_FILE_COUNT("LogFileCount", "Number of log files to retain", "10"),

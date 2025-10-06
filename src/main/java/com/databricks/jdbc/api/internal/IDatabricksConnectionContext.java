@@ -63,6 +63,8 @@ public interface IDatabricksConnectionContext {
 
   LogLevel getLogLevel();
 
+  TelemetryLogLevel getTelemetryLogLevel();
+
   String getLogPathString();
 
   int getLogFileSize();

@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class DatabricksConnectionContextTest {
 
@@ -500,6 +502,29 @@ class DatabricksConnectionContextTest {
     assertEquals(getLogLevel(4), LogLevel.INFO);
     assertEquals(getLogLevel(5), LogLevel.DEBUG);
     assertEquals(getLogLevel(6), LogLevel.TRACE);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "<NULL>, DEBUG",
+        "'', DEBUG",
+        "6, TRACE",
+        "0, OFF",
+        "'  trace  ', TRACE",
+        "nope, DEBUG"
+      },
+      nullValues = "<NULL>")
+  void testTelemetryLogLevelParameterized(String input, TelemetryLogLevel expected)
+      throws DatabricksSQLException {
+    String baseUrl = TestConstants.VALID_URL_1;
+    Properties props = new Properties();
+    if (input != null) {
+      props.setProperty("telemetryLogLevel", input);
+    }
+    DatabricksConnectionContext ctx =
+        (DatabricksConnectionContext) DatabricksConnectionContext.parse(baseUrl, props);
+    assertEquals(expected, ctx.getTelemetryLogLevel());
   }
 
   @Test
