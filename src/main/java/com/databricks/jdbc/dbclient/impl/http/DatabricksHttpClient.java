@@ -7,13 +7,13 @@ import static io.netty.util.NetUtil.LOCALHOST;
 
 import com.databricks.jdbc.api.internal.IDatabricksConnectionContext;
 import com.databricks.jdbc.common.HttpClientType;
+import com.databricks.jdbc.common.RequestType;
 import com.databricks.jdbc.common.util.DriverUtil;
 import com.databricks.jdbc.common.util.UserAgentManager;
 import com.databricks.jdbc.dbclient.IDatabricksHttpClient;
 import com.databricks.jdbc.dbclient.impl.common.ConfiguratorUtils;
 import com.databricks.jdbc.exception.DatabricksDriverException;
 import com.databricks.jdbc.exception.DatabricksHttpException;
-import com.databricks.jdbc.exception.DatabricksRetryHandlerException;
 import com.databricks.jdbc.exception.DatabricksSSLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
@@ -23,6 +23,7 @@ import com.databricks.sdk.core.utils.ProxyUtils;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
@@ -50,6 +51,7 @@ public class DatabricksHttpClient implements IDatabricksHttpClient, Closeable {
   private final CloseableHttpClient httpClient;
   private IdleConnectionEvictor idleConnectionEvictor;
   private CloseableHttpAsyncClient asyncClient;
+  private IDatabricksConnectionContext connectionContext;
 
   DatabricksHttpClient(IDatabricksConnectionContext connectionContext, HttpClientType type) {
     connectionManager = initializeConnectionManager(connectionContext);
@@ -59,6 +61,7 @@ public class DatabricksHttpClient implements IDatabricksHttpClient, Closeable {
             connectionManager, connectionContext.getIdleHttpConnectionExpiry(), TimeUnit.SECONDS);
     idleConnectionEvictor.start();
     asyncClient = GlobalAsyncHttpClient.getClient();
+    this.connectionContext = connectionContext;
   }
 
   @VisibleForTesting
@@ -78,20 +81,78 @@ public class DatabricksHttpClient implements IDatabricksHttpClient, Closeable {
   public CloseableHttpResponse execute(HttpUriRequest request, boolean supportGzipEncoding)
       throws DatabricksHttpException {
     LOGGER.debug("Executing HTTP request {}", RequestSanitizer.sanitizeRequest(request));
+    prepareRequestHeaders(request, supportGzipEncoding);
+    try {
+      return httpClient.execute(request);
+    } catch (IOException e) {
+      RetryUtils.throwDatabricksHttpException(e, request);
+    }
+    return null;
+  }
+
+  @Override
+  public CloseableHttpResponse executeWithRetry(HttpUriRequest request, RequestType requestType)
+      throws DatabricksHttpException {
+    return executeWithRetry(request, requestType, false);
+  }
+
+  @Override
+  public CloseableHttpResponse executeWithRetry(
+      HttpUriRequest request, RequestType requestType, boolean supportGzipEncoding)
+      throws DatabricksHttpException {
+    prepareRequestHeaders(request, supportGzipEncoding);
+
+    IRetryStrategy strategy = RetryUtils.getRetryStrategy(requestType);
+    LOGGER.debug(
+        "Executing HTTP request : {}, request type : {},  retryStrategy : {}",
+        RequestSanitizer.sanitizeRequest(request),
+        requestType,
+        strategy.getClass().getSimpleName());
+
+    RetryTimeoutManager retryTimeoutManager = new RetryTimeoutManager(connectionContext);
+
+    int retryAttempt = 0;
+
+    while (true) {
+      Optional<Integer> shouldRetryAfter;
+      try {
+        CloseableHttpResponse response = httpClient.execute(request);
+        int statusCode = response.getStatusLine().getStatusCode();
+        Optional<Integer> retryAfterHeader = RetryUtils.extractRetryAfterHeader(response);
+        shouldRetryAfter =
+            strategy.shouldRetryAfter(
+                statusCode, retryAfterHeader, retryAttempt, connectionContext, retryTimeoutManager);
+        if (shouldRetryAfter.isEmpty()) {
+          return response;
+        }
+        response.close();
+      } catch (Exception e) {
+        shouldRetryAfter = strategy.shouldRetryAfter(e, retryAttempt, retryTimeoutManager);
+        if (shouldRetryAfter.isEmpty()) {
+          RetryUtils.throwDatabricksHttpException(e, request);
+        }
+      }
+
+      try {
+        Thread.sleep(shouldRetryAfter.get());
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Thread interrupted during retry", e);
+      }
+      retryAttempt++;
+    }
+  }
+
+  private void prepareRequestHeaders(HttpUriRequest request, boolean supportGzipEncoding) {
     if (!DriverUtil.isRunningAgainstFake() && supportGzipEncoding) {
       // TODO : allow gzip in wiremock
       request.setHeader("Content-Encoding", "gzip");
     }
-    try {
-      String userAgentString = UserAgentManager.getUserAgentString();
-      if (!isNullOrEmpty(userAgentString) && !request.containsHeader("User-Agent")) {
-        request.setHeader("User-Agent", userAgentString);
-      }
-      return httpClient.execute(request);
-    } catch (IOException e) {
-      throwHttpException(e, request);
+
+    String userAgentString = UserAgentManager.getUserAgentString();
+    if (!isNullOrEmpty(userAgentString) && !request.containsHeader("User-Agent")) {
+      request.setHeader("User-Agent", userAgentString);
     }
-    return null;
   }
 
   /**
@@ -175,24 +236,6 @@ public class DatabricksHttpClient implements IDatabricksHttpClient, Closeable {
       setFakeServiceRouteInHttpClient(builder);
     }
     return builder.build();
-  }
-
-  private static void throwHttpException(Exception e, HttpUriRequest request)
-      throws DatabricksHttpException {
-    Throwable cause = e;
-    while (cause != null) {
-      if (cause instanceof DatabricksRetryHandlerException) {
-        throw new DatabricksHttpException(
-            cause.getMessage(), cause, DatabricksDriverErrorCode.INVALID_STATE);
-      }
-      cause = cause.getCause();
-    }
-    String errorMsg =
-        String.format(
-            "Caught error while executing http request: [%s]. Error Message: [%s]",
-            RequestSanitizer.sanitizeRequest(request), e);
-    LOGGER.error(e, errorMsg);
-    throw new DatabricksHttpException(errorMsg, DEFAULT_HTTP_EXCEPTION_SQLSTATE);
   }
 
   @VisibleForTesting
