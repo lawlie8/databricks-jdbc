@@ -11,6 +11,7 @@ import static org.mockito.Mockito.*;
 
 import com.databricks.jdbc.api.internal.IDatabricksConnectionContext;
 import com.databricks.jdbc.common.DatabricksClientType;
+import com.databricks.jdbc.common.TelemetryLogLevel;
 import com.databricks.jdbc.common.util.DatabricksThreadContextHolder;
 import com.databricks.jdbc.model.telemetry.StatementTelemetryDetails;
 import com.databricks.jdbc.model.telemetry.latency.OperationType;
@@ -46,6 +47,7 @@ public class TelemetryHelperTest {
     when(connectionContext.getConnectionUuid()).thenReturn("test-uuid");
     when(connectionContext.getTelemetryBatchSize()).thenReturn(10);
     when(connectionContext.getTelemetryFlushIntervalInMilliseconds()).thenReturn(1000);
+    when(connectionContext.getTelemetryLogLevel()).thenReturn(TelemetryLogLevel.DEBUG);
   }
 
   @Test
@@ -53,13 +55,16 @@ public class TelemetryHelperTest {
     TelemetryHelper telemetryHelper = new TelemetryHelper(); // Increasing coverage for class
     StatementTelemetryDetails telemetryDetails =
         new StatementTelemetryDetails(TEST_STRING).setOperationLatencyMillis(150L);
-    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(telemetryDetails));
+    assertDoesNotThrow(
+        () -> TelemetryHelper.exportTelemetryLog(telemetryDetails, TelemetryLogLevel.FATAL));
   }
 
   @Test
   void testErrorTelemetryToNoAuthTelemetryClientDoesNotThrowError() {
     assertDoesNotThrow(
-        () -> TelemetryHelper.exportFailureLog(connectionContext, TEST_STRING, TEST_STRING));
+        () ->
+            TelemetryHelper.exportFailureLog(
+                connectionContext, TEST_STRING, TEST_STRING, TelemetryLogLevel.FATAL));
   }
 
   @Test
@@ -98,6 +103,12 @@ public class TelemetryHelperTest {
   void testIsTelemetryAllowedForConnectionWithDisabledTelemetry() {
     when(connectionContext.isTelemetryEnabled()).thenReturn(false);
     when(connectionContext.forceEnableTelemetry()).thenReturn(false);
+    assertFalse(TelemetryHelper.isTelemetryAllowedForConnection(connectionContext));
+  }
+
+  @Test
+  void testIsTelemetryAllowedForConnectionWithDisabledTelemetryLogLevel() {
+    when(connectionContext.getTelemetryLogLevel()).thenReturn(TelemetryLogLevel.OFF);
     assertFalse(TelemetryHelper.isTelemetryAllowedForConnection(connectionContext));
   }
 
@@ -153,14 +164,14 @@ public class TelemetryHelperTest {
   @Test
   void testExportTelemetryLogWithNullContext() {
     StatementTelemetryDetails details = new StatementTelemetryDetails("test-statement-id");
-    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(details));
+    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(details, TelemetryLogLevel.FATAL));
   }
 
   @Test
   void testExportTelemetryLogWithNullDetails() {
     // Clear thread context to test with null details
     DatabricksThreadContextHolder.clearConnectionContext();
-    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(null));
+    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(null, TelemetryLogLevel.FATAL));
   }
 
   @Test
@@ -168,7 +179,8 @@ public class TelemetryHelperTest {
     // Clear thread context to test with null context
     DatabricksThreadContextHolder.clearConnectionContext();
     DatabricksThreadContextHolder.clearStatementInfo();
-    assertDoesNotThrow(() -> TelemetryHelper.exportFailureLog(null, "err", "msg"));
+    assertDoesNotThrow(
+        () -> TelemetryHelper.exportFailureLog(null, "err", "msg", TelemetryLogLevel.FATAL));
   }
 
   @Test
@@ -201,6 +213,7 @@ public class TelemetryHelperTest {
 
   @Test
   public void testTelemetryAllowedWithForceTelemetryFlag() {
+    when(connectionContext.getTelemetryLogLevel()).thenReturn(TelemetryLogLevel.DEBUG);
     when(connectionContext.getComputeResource()).thenReturn(WAREHOUSE_COMPUTE);
     enableFeatureFlagForTesting(connectionContext, Collections.emptyMap());
     assertTrue(() -> isTelemetryAllowedForConnection(connectionContext));

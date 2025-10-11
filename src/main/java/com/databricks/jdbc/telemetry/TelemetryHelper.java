@@ -4,6 +4,7 @@ import static com.databricks.jdbc.common.util.WildcardUtil.isNullOrEmpty;
 
 import com.databricks.jdbc.api.internal.IDatabricksConnectionContext;
 import com.databricks.jdbc.common.DatabricksClientConfiguratorManager;
+import com.databricks.jdbc.common.TelemetryLogLevel;
 import com.databricks.jdbc.common.safe.DatabricksDriverFeatureFlagsContextFactory;
 import com.databricks.jdbc.common.util.DatabricksThreadContextHolder;
 import com.databricks.jdbc.common.util.DriverUtil;
@@ -57,6 +58,9 @@ public class TelemetryHelper {
   }
 
   public static boolean isTelemetryAllowedForConnection(IDatabricksConnectionContext context) {
+    if (context == null || context.getTelemetryLogLevel().equals(TelemetryLogLevel.OFF)) {
+      return false;
+    }
     if (context != null && context.forceEnableTelemetry()) {
       return true;
     }
@@ -66,17 +70,25 @@ public class TelemetryHelper {
             .isFeatureEnabled(TELEMETRY_FEATURE_FLAG_NAME);
   }
 
-  public static void exportTelemetryLog(StatementTelemetryDetails telemetryDetails) {
+  public static void exportTelemetryLog(
+      StatementTelemetryDetails telemetryDetails, TelemetryLogLevel logLevel) {
     exportTelemetryEvent(
-        DatabricksThreadContextHolder.getConnectionContext(), telemetryDetails, null, null);
+        DatabricksThreadContextHolder.getConnectionContext(),
+        telemetryDetails,
+        null,
+        null,
+        logLevel);
   }
 
   private static void exportTelemetryEvent(
       IDatabricksConnectionContext connectionContext,
       StatementTelemetryDetails telemetryDetails,
       DriverErrorInfo errorInfo,
-      Long chunkIndex) {
-    if (connectionContext == null || telemetryDetails == null) {
+      Long chunkIndex,
+      TelemetryLogLevel logLevel) {
+    if (connectionContext == null
+        || telemetryDetails == null
+        || logLevel.toInt() <= connectionContext.getTelemetryLogLevel().toInt()) {
       // This is when the context is not set or the telemetry details are not set.
       // In either of these scenarios, we don't export logs.
       return;
@@ -99,7 +111,7 @@ public class TelemetryHelper {
     telemetryEvent.setSqlOperation(sqlExecutionEvent);
 
     TelemetryFrontendLog telemetryFrontendLog =
-        new TelemetryFrontendLog()
+        new TelemetryFrontendLog(logLevel)
             .setFrontendLogEventId(getEventUUID())
             .setContext(getLogContext())
             .setEntry(new FrontendLogEntry().setSqlDriverLog(telemetryEvent));
@@ -109,10 +121,13 @@ public class TelemetryHelper {
   }
 
   public static void exportFailureLog(
-      IDatabricksConnectionContext connectionContext, String errorName, String errorMessage) {
+      IDatabricksConnectionContext connectionContext,
+      String errorName,
+      String errorMessage,
+      TelemetryLogLevel logLevel) {
     String statementId = DatabricksThreadContextHolder.getStatementId();
     exportFailureLog(
-        connectionContext, errorName, errorMessage, statementId, /* chunkIndex */ null);
+        connectionContext, errorName, errorMessage, statementId, /* chunkIndex */ null, logLevel);
   }
 
   public static void exportFailureLog(
@@ -120,7 +135,8 @@ public class TelemetryHelper {
       String errorName,
       String errorMessage,
       String statementId,
-      Long chunkIndex) {
+      Long chunkIndex,
+      TelemetryLogLevel logLevel) {
     DriverErrorInfo errorInfo =
         new DriverErrorInfo().setErrorName(errorName).setStackTrace(errorMessage);
     StatementTelemetryDetails telemetryDetails;
@@ -129,7 +145,7 @@ public class TelemetryHelper {
     } else {
       telemetryDetails = TelemetryCollector.getInstance().getOrCreateTelemetryDetails(statementId);
     }
-    exportTelemetryEvent(connectionContext, telemetryDetails, errorInfo, chunkIndex);
+    exportTelemetryEvent(connectionContext, telemetryDetails, errorInfo, chunkIndex, logLevel);
   }
 
   public static String getStatementIdString(StatementId statementId) {
