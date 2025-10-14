@@ -27,6 +27,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -217,6 +218,23 @@ public class TelemetryHelperTest {
     when(connectionContext.getComputeResource()).thenReturn(WAREHOUSE_COMPUTE);
     enableFeatureFlagForTesting(connectionContext, Collections.emptyMap());
     assertTrue(() -> isTelemetryAllowedForConnection(connectionContext));
+  }
+
+  @Test
+  void testExportTelemetryLog_SkipsWhenEventLevelLowerThanConfigured() {
+    // Configured level: DEBUG (more verbose)
+    when(connectionContext.getTelemetryLogLevel()).thenReturn(TelemetryLogLevel.DEBUG);
+    StatementTelemetryDetails details =
+        new StatementTelemetryDetails("stmt-1").setOperationLatencyMillis(10L);
+
+    try (MockedStatic<TelemetryClientFactory> mocked =
+        Mockito.mockStatic(TelemetryClientFactory.class)) {
+      // Do not set any behavior for getInstance(); we only want to verify it's never called.
+      TelemetryHelper.exportTelemetryLog(details, TelemetryLogLevel.ERROR); // lower than DEBUG
+
+      // Verify export was skipped by asserting no attempt to obtain the telemetry client factory
+      mocked.verify(() -> TelemetryClientFactory.getInstance(), never());
+    }
   }
 
   static Stream<Object[]> failureLogParameters() {

@@ -78,12 +78,12 @@ public class DatabricksSQLException extends SQLException {
           reason,
           TelemetryLogLevel.FATAL);
     } else {
-      // These are recoverable errors, hence adding a lower log level
+      // These are errors that are thrown to call a fallback method, hence adding a lower log level.
       exportFailureLog(
           DatabricksThreadContextHolder.getConnectionContext(),
           sqlState,
           reason,
-          TelemetryLogLevel.ERROR);
+          TelemetryLogLevel.WARN);
     }
   }
 }

@@ -89,8 +89,12 @@ public class TelemetryHelper {
     if (connectionContext == null
         || telemetryDetails == null
         || logLevel.toInt() <= connectionContext.getTelemetryLogLevel().toInt()) {
-      // This is when the context is not set or the telemetry details are not set.
-      // In either of these scenarios, we don't export logs.
+      // We don't export telemetry logs in the following three scenarios:
+      // 1. When the context is not set.
+      // 2. When telemetry details are not set.
+      // 3. When the telemetry logLevel configured in the connection context is higher than the
+      // logLevel for the event.
+      // In any of these cases, export is skipped.
       return;
     }
     TelemetryEvent telemetryEvent =
