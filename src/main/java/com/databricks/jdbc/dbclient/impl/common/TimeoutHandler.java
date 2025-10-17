@@ -68,7 +68,7 @@ public class TimeoutHandler {
               "Statement execution timed-out after %d seconds. Operation: %s",
               timeoutSeconds, operationDescription);
       LOGGER.error(timeoutErrorMessage);
-      throw new DatabricksTimeoutException(timeoutErrorMessage, null, internalErrorCode);
+      throw new DatabricksTimeoutException(timeoutErrorMessage, /*cause*/ null, internalErrorCode);
     }
   }
 
