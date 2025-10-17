@@ -16,6 +16,6 @@ public class DatabricksTimeoutException extends SQLTimeoutException {
         DatabricksThreadContextHolder.getConnectionContext(),
         internalError.name(),
         reason,
-        TelemetryLogLevel.FATAL);
+        TelemetryLogLevel.ERROR);
   }
 }

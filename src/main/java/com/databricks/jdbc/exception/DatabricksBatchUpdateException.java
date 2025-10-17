@@ -25,7 +25,7 @@ public class DatabricksBatchUpdateException extends BatchUpdateException {
         DatabricksThreadContextHolder.getConnectionContext(),
         internalErrorCode.toString(),
         reason,
-        TelemetryLogLevel.FATAL);
+        TelemetryLogLevel.ERROR);
   }
 
   public DatabricksBatchUpdateException(
@@ -40,7 +40,7 @@ public class DatabricksBatchUpdateException extends BatchUpdateException {
         DatabricksThreadContextHolder.getConnectionContext(),
         SQLState,
         reason,
-        TelemetryLogLevel.FATAL);
+        TelemetryLogLevel.ERROR);
   }
 
   public long[] getLargeUpdateCounts() {

@@ -23,7 +23,7 @@ public class DatabricksDriverException extends RuntimeException {
         DatabricksThreadContextHolder.getConnectionContext(),
         sqlState,
         reason,
-        TelemetryLogLevel.FATAL);
+        TelemetryLogLevel.ERROR);
   }
 
   public DatabricksDriverException(String reason, String sqlState) {
@@ -32,6 +32,6 @@ public class DatabricksDriverException extends RuntimeException {
         DatabricksThreadContextHolder.getConnectionContext(),
         sqlState,
         reason,
-        TelemetryLogLevel.FATAL);
+        TelemetryLogLevel.ERROR);
   }
 }

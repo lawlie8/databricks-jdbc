@@ -57,7 +57,7 @@ public class TelemetryHelperTest {
     StatementTelemetryDetails telemetryDetails =
         new StatementTelemetryDetails(TEST_STRING).setOperationLatencyMillis(150L);
     assertDoesNotThrow(
-        () -> TelemetryHelper.exportTelemetryLog(telemetryDetails, TelemetryLogLevel.FATAL));
+        () -> TelemetryHelper.exportTelemetryLog(telemetryDetails, TelemetryLogLevel.ERROR));
   }
 
   @Test
@@ -65,7 +65,7 @@ public class TelemetryHelperTest {
     assertDoesNotThrow(
         () ->
             TelemetryHelper.exportFailureLog(
-                connectionContext, TEST_STRING, TEST_STRING, TelemetryLogLevel.FATAL));
+                connectionContext, TEST_STRING, TEST_STRING, TelemetryLogLevel.ERROR));
   }
 
   @Test
@@ -165,14 +165,14 @@ public class TelemetryHelperTest {
   @Test
   void testExportTelemetryLogWithNullContext() {
     StatementTelemetryDetails details = new StatementTelemetryDetails("test-statement-id");
-    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(details, TelemetryLogLevel.FATAL));
+    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(details, TelemetryLogLevel.ERROR));
   }
 
   @Test
   void testExportTelemetryLogWithNullDetails() {
     // Clear thread context to test with null details
     DatabricksThreadContextHolder.clearConnectionContext();
-    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(null, TelemetryLogLevel.FATAL));
+    assertDoesNotThrow(() -> TelemetryHelper.exportTelemetryLog(null, TelemetryLogLevel.ERROR));
   }
 
   @Test
@@ -181,7 +181,7 @@ public class TelemetryHelperTest {
     DatabricksThreadContextHolder.clearConnectionContext();
     DatabricksThreadContextHolder.clearStatementInfo();
     assertDoesNotThrow(
-        () -> TelemetryHelper.exportFailureLog(null, "err", "msg", TelemetryLogLevel.FATAL));
+        () -> TelemetryHelper.exportFailureLog(null, "err", "msg", TelemetryLogLevel.ERROR));
   }
 
   @Test
