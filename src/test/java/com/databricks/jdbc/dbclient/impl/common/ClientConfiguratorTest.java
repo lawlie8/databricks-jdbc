@@ -170,7 +170,7 @@ public class ClientConfiguratorTest {
     assertEquals("https://sample-host.18.azuredatabricks.net", config.getHost());
     assertEquals("test-client", config.getClientId());
     assertEquals("custom-oauth-m2m", provider.authType());
-    assertEquals(DatabricksJdbcConstants.M2M_AUTH_TYPE, config.getAuthType());
+    assertEquals(provider.authType(), config.getAuthType());
     assertEquals(
         PrivateKeyClientCredentialProvider.class, provider.getCredentialsProvider().getClass());
   }

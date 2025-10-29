@@ -46,6 +46,7 @@ public class DatabricksTokenFederationProvider implements CredentialsProvider, T
   private static final JdbcLogger LOGGER =
       JdbcLoggerFactory.getLogger(DatabricksTokenFederationProvider.class);
   private Token token;
+  private HeaderFactory externalHeaderFactory;
   private static final Map<String, String> TOKEN_EXCHANGE_PARAMS =
       Map.of(
           "grant_type",
@@ -69,6 +70,9 @@ public class DatabricksTokenFederationProvider implements CredentialsProvider, T
     this.credentialsProvider = credentialsProvider;
     this.externalProviderHeaders = new HashMap<>();
     this.hc = DatabricksHttpClientFactory.getInstance().getClient(connectionContext);
+    // Initialize a minimal config; real config will be provided via configure(databricksConfig)
+    this.config = null;
+    this.externalHeaderFactory = null;
     this.token =
         new Token(
             DatabricksJdbcConstants.EMPTY_STRING,
@@ -85,6 +89,7 @@ public class DatabricksTokenFederationProvider implements CredentialsProvider, T
     this.connectionContext = connectionContext;
     this.credentialsProvider = credentialsProvider;
     this.config = config;
+    this.externalHeaderFactory = this.credentialsProvider.configure(this.config);
     this.externalProviderHeaders = new HashMap<>();
     this.token =
         new Token(
@@ -113,6 +118,8 @@ public class DatabricksTokenFederationProvider implements CredentialsProvider, T
     }
 
     this.config = databricksConfig;
+    // Call the underlying provider's configure ONCE and cache the HeaderFactory
+    this.externalHeaderFactory = this.credentialsProvider.configure(this.config);
     return () -> {
       Token exchangedToken = getToken();
       Map<String, String> headers = new HashMap<>(this.externalProviderHeaders);
@@ -124,7 +131,11 @@ public class DatabricksTokenFederationProvider implements CredentialsProvider, T
   }
 
   public Token getToken() {
-    this.externalProviderHeaders = this.credentialsProvider.configure(this.config).headers();
+    if (this.externalHeaderFactory == null) {
+      // Lazy-initialize if configure(databricksConfig) was not called yet
+      this.externalHeaderFactory = this.credentialsProvider.configure(this.config);
+    }
+    this.externalProviderHeaders = this.externalHeaderFactory.headers();
     String[] tokenInfo = extractTokenInfoFromHeader(this.externalProviderHeaders);
     String accessTokenType = tokenInfo[0];
     String accessToken = tokenInfo[1];

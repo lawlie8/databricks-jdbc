@@ -377,18 +377,21 @@ public class ClientConfigurator {
                   connectionContext, new AzureServicePrincipalCredentialsProvider()));
     } else {
       databricksConfig
-          .setAuthType(DatabricksJdbcConstants.M2M_AUTH_TYPE)
           .setClientId(connectionContext.getClientId())
           .setClientSecret(connectionContext.getClientSecret());
       if (connectionContext.useJWTAssertion()) {
-        databricksConfig.setCredentialsProvider(
-            new DatabricksTokenFederationProvider(
-                connectionContext,
-                new PrivateKeyClientCredentialProvider(connectionContext, databricksConfig)));
+        CredentialsProvider jwtProvider =
+            new PrivateKeyClientCredentialProvider(connectionContext, databricksConfig);
+        databricksConfig
+            .setAuthType(jwtProvider.authType())
+            .setCredentialsProvider(
+                new DatabricksTokenFederationProvider(connectionContext, jwtProvider));
       } else {
-        databricksConfig.setCredentialsProvider(
-            new DatabricksTokenFederationProvider(
-                connectionContext, new OAuthM2MServicePrincipalCredentialsProvider()));
+        CredentialsProvider m2mProvider = new OAuthM2MServicePrincipalCredentialsProvider();
+        databricksConfig
+            .setAuthType(DatabricksJdbcConstants.M2M_AUTH_TYPE)
+            .setCredentialsProvider(
+                new DatabricksTokenFederationProvider(connectionContext, m2mProvider));
       }
     }
   }
