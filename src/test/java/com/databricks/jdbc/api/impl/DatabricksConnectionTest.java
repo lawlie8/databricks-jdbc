@@ -723,7 +723,7 @@ public class DatabricksConnectionTest {
 
     DatabricksConnection spyConnection = spy(connection);
 
-    assertDoesNotThrow(() -> spyConnection.commit());
+    assertDoesNotThrow(spyConnection::commit);
 
     verify(spyConnection, never()).createStatement();
 
@@ -746,7 +746,7 @@ public class DatabricksConnectionTest {
         new SQLException("MULTI_STATEMENT_TRANSACTION_NO_ACTIVE_TRANSACTION", "25000", 54321);
     when(mockStatement.execute("COMMIT")).thenThrow(serverError);
 
-    SQLException thrown = assertThrows(SQLException.class, () -> spyConnection.commit());
+    SQLException thrown = assertThrows(SQLException.class, spyConnection::commit);
 
     assertTrue(thrown.getMessage().contains("MULTI_STATEMENT_TRANSACTION_NO_ACTIVE_TRANSACTION"));
     assertEquals("25000", thrown.getSQLState());
@@ -813,7 +813,7 @@ public class DatabricksConnectionTest {
     SQLException serverError = new SQLException("Unexpected rollback error", "HY000", 99999);
     when(mockStatement.execute("ROLLBACK")).thenThrow(serverError);
 
-    SQLException thrown = assertThrows(SQLException.class, () -> spyConnection.rollback());
+    SQLException thrown = assertThrows(SQLException.class, spyConnection::rollback);
 
     assertTrue(thrown.getMessage().contains("Unexpected rollback error"));
     assertEquals("HY000", thrown.getSQLState());
@@ -846,6 +846,120 @@ public class DatabricksConnectionTest {
     assertNotNull(thrown.getCause());
     assertEquals("Wrapper error", thrown.getCause().getMessage());
     assertEquals(rootCause, thrown.getCause().getCause());
+
+    spyConnection.close();
+  }
+
+  // ==================== FetchAutoCommitFromServer Tests ====================
+
+  @Test
+  public void testGetAutoCommitWithFetchFromServerEnabled_ReturnsTrue() throws SQLException {
+    // Create connection context with FetchAutoCommitFromServer=1
+    String urlWithFetch = CATALOG_SCHEMA_JDBC_URL + ";FetchAutoCommitFromServer=1";
+    IDatabricksConnectionContext contextWithFetch =
+        DatabricksConnectionContext.parse(urlWithFetch, new Properties());
+
+    when(databricksClient.createSession(
+            new Warehouse(WAREHOUSE_ID), CATALOG, SCHEMA, new HashMap<>()))
+        .thenReturn(IMMUTABLE_SESSION_INFO);
+    connection = new DatabricksConnection(contextWithFetch, databricksClient);
+    connection.open();
+
+    DatabricksConnection spyConnection = spy(connection);
+    DatabricksStatement mockStatement = mock(DatabricksStatement.class);
+    ResultSet mockResultSet = mock(ResultSet.class);
+
+    doReturn(mockStatement).when(spyConnection).createStatement();
+    when(mockStatement.executeQuery("SET AUTOCOMMIT")).thenReturn(mockResultSet);
+    when(mockResultSet.next()).thenReturn(true);
+    when(mockResultSet.getString(1)).thenReturn("true"); // Server returns "true"
+
+    // Call getAutoCommit - should query server
+    boolean result = spyConnection.getAutoCommit();
+
+    // Verify server was queried
+    verify(mockStatement).executeQuery("SET AUTOCOMMIT");
+    verify(mockResultSet).getString(1);
+    verify(mockStatement).close();
+
+    // Verify result is true
+    assertTrue(result);
+
+    // Verify cache was updated
+    assertTrue(spyConnection.getSession().getAutoCommit());
+
+    spyConnection.close();
+  }
+
+  @Test
+  public void testGetAutoCommitWithFetchFromServerEnabled_ReturnsFalse() throws SQLException {
+    // Create connection context with FetchAutoCommitFromServer=1
+    String urlWithFetch = CATALOG_SCHEMA_JDBC_URL + ";FetchAutoCommitFromServer=1";
+    IDatabricksConnectionContext contextWithFetch =
+        DatabricksConnectionContext.parse(urlWithFetch, new Properties());
+
+    when(databricksClient.createSession(
+            new Warehouse(WAREHOUSE_ID), CATALOG, SCHEMA, new HashMap<>()))
+        .thenReturn(IMMUTABLE_SESSION_INFO);
+    connection = new DatabricksConnection(contextWithFetch, databricksClient);
+    connection.open();
+
+    DatabricksConnection spyConnection = spy(connection);
+    DatabricksStatement mockStatement = mock(DatabricksStatement.class);
+    ResultSet mockResultSet = mock(ResultSet.class);
+
+    doReturn(mockStatement).when(spyConnection).createStatement();
+    when(mockStatement.executeQuery("SET AUTOCOMMIT")).thenReturn(mockResultSet);
+    when(mockResultSet.next()).thenReturn(true);
+    when(mockResultSet.getString(1)).thenReturn("false"); // Server returns "false"
+
+    // Call getAutoCommit - should query server
+    boolean result = spyConnection.getAutoCommit();
+
+    // Verify server was queried
+    verify(mockStatement).executeQuery("SET AUTOCOMMIT");
+    verify(mockResultSet).getString(1);
+    verify(mockStatement).close();
+
+    // Verify result is false
+    assertFalse(result);
+
+    // Verify cache was updated
+    assertFalse(spyConnection.getSession().getAutoCommit());
+
+    spyConnection.close();
+  }
+
+  @Test
+  public void testGetAutoCommitWithFetchFromServerEnabled_ServerQueryFails() throws SQLException {
+    // Create connection context with FetchAutoCommitFromServer=1
+    String urlWithFetch = CATALOG_SCHEMA_JDBC_URL + ";FetchAutoCommitFromServer=1";
+    IDatabricksConnectionContext contextWithFetch =
+        DatabricksConnectionContext.parse(urlWithFetch, new Properties());
+
+    when(databricksClient.createSession(
+            new Warehouse(WAREHOUSE_ID), CATALOG, SCHEMA, new HashMap<>()))
+        .thenReturn(IMMUTABLE_SESSION_INFO);
+    connection = new DatabricksConnection(contextWithFetch, databricksClient);
+    connection.open();
+
+    DatabricksConnection spyConnection = spy(connection);
+    DatabricksStatement mockStatement = mock(DatabricksStatement.class);
+
+    doReturn(mockStatement).when(spyConnection).createStatement();
+    SQLException serverError = new SQLException("Server error during SET AUTOCOMMIT query");
+    when(mockStatement.executeQuery("SET AUTOCOMMIT")).thenThrow(serverError);
+
+    // Call getAutoCommit - should throw exception
+    SQLException thrown = assertThrows(DatabricksSQLException.class, spyConnection::getAutoCommit);
+
+    // Verify error message
+    assertTrue(
+        thrown.getMessage().contains("Failed to fetch autoCommit state from server"),
+        "Exception message should indicate fetch failure");
+
+    // Verify statement was closed even after exception
+    verify(mockStatement).close();
 
     spyConnection.close();
   }

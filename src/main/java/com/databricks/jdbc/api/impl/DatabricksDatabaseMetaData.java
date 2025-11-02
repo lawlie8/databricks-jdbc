@@ -827,7 +827,7 @@ public class DatabricksDatabaseMetaData implements DatabaseMetaData {
   public int getDefaultTransactionIsolation() throws SQLException {
     LOGGER.debug("public int getDefaultTransactionIsolation()");
     throwExceptionIfConnectionIsClosed();
-    return Connection.TRANSACTION_READ_COMMITTED;
+    return Connection.TRANSACTION_REPEATABLE_READ;
   }
 
   @Override
@@ -841,7 +841,7 @@ public class DatabricksDatabaseMetaData implements DatabaseMetaData {
   public boolean supportsTransactionIsolationLevel(int level) throws SQLException {
     LOGGER.debug("public boolean supportsTransactionIsolationLevel(int level = {})", level);
     throwExceptionIfConnectionIsClosed();
-    return level == Connection.TRANSACTION_READ_COMMITTED;
+    return level == Connection.TRANSACTION_REPEATABLE_READ;
   }
 
   @Override

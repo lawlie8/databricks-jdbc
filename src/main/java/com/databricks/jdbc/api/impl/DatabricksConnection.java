@@ -207,15 +207,72 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
    *
    * <p>After {@link #setAutoCommit(boolean)} is called, returns the cached value from the session.
    *
+   * <p>If the connection property {@code FetchAutoCommitFromServer=1} is set, this method will
+   * query the server using {@code SET AUTOCOMMIT} SQL command to retrieve the current auto-commit
+   * state, ensuring the returned value matches the server state. This is useful for debugging or
+   * when strict state verification is needed.
+   *
    * @return true if auto-commit mode is enabled; false otherwise
    * @throws DatabricksSQLException if the connection is closed
+   * @throws DatabricksSQLException if querying the server fails (when FetchAutoCommitFromServer=1)
    * @see #setAutoCommit(boolean)
    */
   @Override
   public boolean getAutoCommit() throws SQLException {
     LOGGER.debug("getAutoCommit()");
     throwExceptionIfConnectionIsClosed();
+
+    // If FetchAutoCommitFromServer is enabled, query the server for current state
+    if (connectionContext.getFetchAutoCommitFromServer()) {
+      return fetchAutoCommitStateFromServer();
+    }
+
+    // Default: return cached value
     return session.getAutoCommit();
+  }
+
+  /**
+   * Fetches the auto-commit state from the server by executing SET AUTOCOMMIT query.
+   *
+   * @return true if auto-commit is enabled on the server; false otherwise
+   * @throws SQLException if the query fails
+   */
+  private boolean fetchAutoCommitStateFromServer() throws SQLException {
+    Statement statement = null;
+    try {
+      statement = createStatement();
+      // Execute SET AUTOCOMMIT without a value to query the current state
+      ResultSet rs = statement.executeQuery("SET AUTOCOMMIT");
+
+      if (rs.next()) {
+        // The result should contain the value = "true" or "false"
+        String value = rs.getString(1); // Column 1: value
+
+        LOGGER.debug(
+            "Fetched autoCommit state from server: value={}. Updating session cache.", value);
+
+        boolean autoCommitState = "true".equalsIgnoreCase(value);
+
+        // Update the session cache with the server value
+        session.setAutoCommit(autoCommitState);
+
+        rs.close();
+        return autoCommitState;
+      } else {
+        throw new DatabricksSQLException(
+            "Failed to fetch autoCommit state from server: no result returned",
+            DatabricksDriverErrorCode.TRANSACTION_SET_AUTOCOMMIT_ERROR);
+      }
+
+    } catch (SQLException e) {
+      throw new DatabricksSQLException(
+          "Failed to fetch autoCommit state from server: " + e.getMessage(),
+          e,
+          DatabricksDriverErrorCode.TRANSACTION_SET_AUTOCOMMIT_ERROR);
+
+    } finally {
+      closeStatementSafely(statement);
+    }
   }
 
   /**
