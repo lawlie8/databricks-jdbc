@@ -118,8 +118,10 @@ public interface IDatabricksClient {
    *
    * @param statementId statement-Id for which chunk should be fetched
    * @param chunkIndex chunkIndex for which chunk should be fetched
+   * @param chunkStartRowOffset the row offset where the chunk starts in the result set
    */
-  Collection<ExternalLink> getResultChunks(StatementId statementId, long chunkIndex)
+  Collection<ExternalLink> getResultChunks(
+      StatementId statementId, long chunkIndex, long chunkStartRowOffset)
       throws DatabricksSQLException;
 
   IDatabricksConnectionContext getConnectionContext();

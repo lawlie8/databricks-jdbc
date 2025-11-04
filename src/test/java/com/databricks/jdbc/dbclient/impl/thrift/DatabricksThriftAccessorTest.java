@@ -18,6 +18,7 @@ import com.databricks.jdbc.exception.DatabricksParsingException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.exception.DatabricksTimeoutException;
 import com.databricks.jdbc.model.client.thrift.generated.*;
+import com.databricks.jdbc.model.telemetry.latency.OperationType;
 import com.databricks.sdk.core.DatabricksConfig;
 import com.databricks.sdk.service.sql.StatementState;
 import java.sql.SQLException;
@@ -373,30 +374,28 @@ public class DatabricksThriftAccessorTest {
 
   @Test
   void testIncludeResultSetMetadataNotSetForOldProtocol()
-      throws TException, DatabricksHttpException, DatabricksParsingException {
+          throws TException, DatabricksSQLException {
+    TOperationHandle operationHandle =
+            new TOperationHandle().setOperationId(handleIdentifier).setHasResultSet(false)
+                    .setOperationType(TOperationType.UNKNOWN);
+
     DatabricksThriftAccessor accessor = spy(new DatabricksThriftAccessor(connectionContext));
     doReturn(thriftClient).when(accessor).getThriftClient();
     accessor.setServerProtocolVersion(TProtocolVersion.SPARK_CLI_SERVICE_PROTOCOL_V4);
     TFetchResultsReq expectedReq = getFetchResultsRequest(false);
+    expectedReq.setOperationHandle(operationHandle);
+
     when(thriftClient.FetchResults(expectedReq))
         .thenReturn(fetchResultsResponse); // request has no includeResultSetMetadata
-    accessor.getResultSetResp(
-        new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS),
-        tOperationHandle,
-        "context",
-        connectionContext.getRowsFetchedPerBlock(),
-        true);
+    when(parentStatement.getStatementId()).thenReturn(StatementId.deserialize(TEST_STMT_ID));
+    accessor.getMoreResults(parentStatement);
 
     accessor.setServerProtocolVersion(TProtocolVersion.SPARK_CLI_SERVICE_PROTOCOL_V9);
     expectedReq = getFetchResultsRequest(true);
+    expectedReq.setOperationHandle(operationHandle);
     when(thriftClient.FetchResults(expectedReq))
         .thenReturn(fetchResultsResponse); // request has includeResultSetMetadata
-    accessor.getResultSetResp(
-        new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS),
-        tOperationHandle,
-        "context",
-        connectionContext.getRowsFetchedPerBlock(),
-        true);
+    accessor.getMoreResults(parentStatement);
   }
 
   @Test

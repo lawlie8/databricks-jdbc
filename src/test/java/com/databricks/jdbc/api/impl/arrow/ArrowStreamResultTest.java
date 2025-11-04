@@ -264,7 +264,7 @@ public class ArrowStreamResultTest {
   private void setupResultChunkMocks() throws DatabricksSQLException {
     for (int chunkIndex = 1; chunkIndex < numberOfChunks; chunkIndex++) {
       boolean isLastChunk = (chunkIndex == (numberOfChunks - 1));
-      when(mockedSdkClient.getResultChunks(STATEMENT_ID, chunkIndex))
+      when(mockedSdkClient.getResultChunks(STATEMENT_ID, chunkIndex, 0))
           .thenReturn(getChunkLinks(chunkIndex, isLastChunk));
     }
   }

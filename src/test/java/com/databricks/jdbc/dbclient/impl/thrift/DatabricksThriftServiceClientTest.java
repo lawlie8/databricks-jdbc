@@ -373,7 +373,7 @@ public class DatabricksThriftServiceClientTest {
     when(resultData.getResultLinks())
         .thenReturn(
             Collections.singletonList(new TSparkArrowResultLink().setFileLink(TEST_STRING)));
-    Collection<ExternalLink> resultChunks = client.getResultChunks(TEST_STMT_ID, 0);
+    Collection<ExternalLink> resultChunks = client.getResultChunks(TEST_STMT_ID, 0, 0);
     assertEquals(resultChunks.size(), 1);
     assertEquals(resultChunks.stream().findFirst().get().getExternalLink(), TEST_STRING);
   }
@@ -388,9 +388,9 @@ public class DatabricksThriftServiceClientTest {
             .setResults(resultData)
             .setResultSetMetadata(resultMetadataData);
     when(thriftAccessor.getResultSetResp(any(), any())).thenReturn(response);
-    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, -1));
-    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 2));
-    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 1));
+    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, -1, 0));
+    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 2, 0));
+    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 1, 0));
   }
 
   @Test

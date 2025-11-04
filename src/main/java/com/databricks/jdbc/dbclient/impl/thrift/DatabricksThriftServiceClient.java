@@ -299,26 +299,41 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
   }
 
   @Override
-  public Collection<ExternalLink> getResultChunks(StatementId statementId, long chunkIndex)
+  public Collection<ExternalLink> getResultChunks(
+          StatementId statementId, long chunkIndex, long chunkStartRowOffset)
       throws DatabricksSQLException {
     String context =
         String.format(
-            "public Optional<ExternalLink> getResultChunk(String statementId = {%s}, long chunkIndex = {%s}) using Thrift client",
+                "public Collection<ExternalLink> getResultChunks(statementId = {%s}, chunkIndex = {%s}) using Thrift client",
             statementId, chunkIndex);
     LOGGER.debug(context);
     DatabricksThreadContextHolder.setStatementId(statementId);
+
     TFetchResultsResp fetchResultsResp;
     List<ExternalLink> externalLinks = new ArrayList<>();
     AtomicInteger index = new AtomicInteger(0);
-    do {
-      fetchResultsResp = thriftAccessor.getResultSetResp(getOperationHandle(statementId), context);
+
+    // First fetch uses chunkStartRowOffset.
+    fetchResultsResp =
+            thriftAccessor.getResultSetResp(getOperationHandle(statementId), chunkStartRowOffset);
+    fetchResultsResp
+            .getResults()
+            .getResultLinks()
+            .forEach(
+                    resultLink ->
+                            externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
+
+    // Subsequent fetches fetch from the next set of rows.
+    while (fetchResultsResp.hasMoreRows) {
+      fetchResultsResp = thriftAccessor.getResultSetResp(getOperationHandle(statementId));
       fetchResultsResp
           .getResults()
           .getResultLinks()
           .forEach(
               resultLink ->
                   externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
-    } while (fetchResultsResp.hasMoreRows);
+    }
+
     if (chunkIndex < 0 || externalLinks.size() <= chunkIndex) {
       String error = String.format("Out of bounds error for chunkIndex. Context: %s", context);
       LOGGER.error(error);

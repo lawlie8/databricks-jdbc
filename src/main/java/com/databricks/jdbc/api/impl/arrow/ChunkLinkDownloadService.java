@@ -214,13 +214,17 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
       return;
     }
 
+    // Calculate row offset for this batch
+    final long batchStartRowOffset = getChunkStartRowOffset(batchStartIndex);
+
     LOGGER.info("Starting batch download from index {}", batchStartIndex);
     currentDownloadTask =
         CompletableFuture.runAsync(
             () -> {
               try {
                 Collection<ExternalLink> links =
-                    session.getDatabricksClient().getResultChunks(statementId, batchStartIndex);
+                        session.getDatabricksClient().getResultChunks(
+                                statementId, batchStartIndex, batchStartRowOffset);
                 LOGGER.info(
                     "Retrieved {} links for batch starting at {} for statement id {}",
                     links.size(),
@@ -411,6 +415,21 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
     nextBatchStartIndex.set(startIndex);
     isDownloadInProgress.set(false);
     isDownloadChainStarted.set(false);
+  }
+
+  /**
+   * Gets the start row offset for a given chunk index.
+   *
+   * @param chunkIndex the chunk index to get the row offset for
+   * @return the start row offset for the chunk
+   */
+  private long getChunkStartRowOffset(long chunkIndex) {
+    T chunk = chunkIndexToChunksMap.get(chunkIndex);
+    if (chunk == null) {
+      // FIXME - throw exception?
+      return 0;
+    }
+    return chunk.getStartRowOffset();
   }
 
   private boolean isChunkLinkExpired(ExternalLink link) {

@@ -409,7 +409,8 @@ public class DatabricksSdkClient implements IDatabricksClient {
   }
 
   @Override
-  public Collection<ExternalLink> getResultChunks(StatementId typedStatementId, long chunkIndex)
+  public Collection<ExternalLink> getResultChunks(StatementId typedStatementId, long chunkIndex,
+                                                  long chunkStartRowOffset)
       throws DatabricksSQLException {
     DatabricksThreadContextHolder.setStatementId(typedStatementId);
     String statementId = typedStatementId.toSQLExecStatementId();

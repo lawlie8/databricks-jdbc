@@ -80,7 +80,7 @@ public class DatabricksThriftUtil {
       throws DatabricksHttpException {
     verifySuccessStatus(status, errorContext, null);
   }
-
+  
   public static void verifySuccessStatus(TStatus status, String errorContext, String statementId)
       throws DatabricksHttpException {
     if (!SUCCESS_STATUS_LIST.contains(status.getStatusCode())) {
@@ -90,7 +90,6 @@ public class DatabricksThriftUtil {
                   "Error thrift response received [%s] for statementId [%s]",
                   errorContext, statementId)
               : String.format("Error thrift response received [%s]", errorContext);
-      LOGGER.error(errorMessage);
       throw new DatabricksHttpException(errorMessage, status.getSqlState());
     }
   }
