@@ -150,6 +150,10 @@ public abstract class AbstractArrowResultChunk {
     return true;
   }
 
+  public ExternalLink getChunkLink() {
+    return chunkLink;
+  }
+
   /**
    * Sets the external link details for this chunk.
    *
@@ -211,7 +215,7 @@ public abstract class AbstractArrowResultChunk {
    *
    * @return number of rows
    */
-  protected long getNumRows() {
+  public long getNumRows() {
     return numRows;
   }
 

@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabricksMetadataClient {
@@ -311,7 +312,7 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
 
     TFetchResultsResp fetchResultsResp;
     List<ExternalLink> externalLinks = new ArrayList<>();
-    AtomicInteger index = new AtomicInteger(0);
+    AtomicLong index = new AtomicLong(chunkIndex);
 
     // First fetch uses chunkStartRowOffset.
     fetchResultsResp =
@@ -322,6 +323,19 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
             .forEach(
                     resultLink ->
                             externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
+
+    if (externalLinks.isEmpty()) {
+      String error = String.format("fetch links returned empty for chunkIndex=%d " +
+              "startRowOffset=%d context=%s", chunkIndex, chunkStartRowOffset, context);
+      throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
+    }
+
+    if (externalLinks.get(0).getRowOffset() > chunkStartRowOffset) {
+      String error = String.format("chunk start row offset mismatch expected=%d actual=%d " +
+                      "context=%s", chunkStartRowOffset, externalLinks.get(0).getRowOffset(),
+              context);
+      throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
+    }
 
     // Subsequent fetches fetch from the next set of rows.
     while (fetchResultsResp.hasMoreRows) {
@@ -334,11 +348,6 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
                   externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
     }
 
-    if (chunkIndex < 0 || externalLinks.size() <= chunkIndex) {
-      String error = String.format("Out of bounds error for chunkIndex. Context: %s", context);
-      LOGGER.error(error);
-      throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
-    }
     return externalLinks;
   }
 
