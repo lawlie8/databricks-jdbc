@@ -19,6 +19,7 @@ import com.databricks.jdbc.model.core.ResultManifest;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.jdbc.telemetry.latency.TelemetryCollector;
 import com.databricks.sdk.service.sql.BaseChunkInfo;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -213,6 +214,10 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
 
   public long getAllowedChunksInMemory() {
     return allowedChunksInMemory;
+  }
+
+  public T getChunkByIndex(long chunkIndex) {
+    return chunkIndexToChunksMap.get(chunkIndex);
   }
 
   /** Subclasses should override this method to perform their specific cleanup. */
