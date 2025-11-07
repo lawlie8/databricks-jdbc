@@ -35,7 +35,6 @@ import com.google.common.annotations.VisibleForTesting;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -304,9 +303,11 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
           StatementId statementId, long chunkIndex, long chunkStartRowOffset)
       throws DatabricksSQLException {
     String context =
-        String.format(
-                "public Collection<ExternalLink> getResultChunks(statementId = {%s}, chunkIndex = {%s}) using Thrift client",
-            statementId, chunkIndex);
+            "public Collection<ExternalLink> getResultChunks(statementId = {"
+                    + statementId
+                    + "}, chunkIndex = {"
+                    + chunkIndex
+                    + "}) using Thrift client";
     LOGGER.debug(context);
     DatabricksThreadContextHolder.setStatementId(statementId);
 
@@ -325,15 +326,16 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
                             externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
 
     if (externalLinks.isEmpty()) {
-      String error = String.format("fetch links returned empty for chunkIndex=%d " +
-              "startRowOffset=%d context=%s", chunkIndex, chunkStartRowOffset, context);
+      String error =
+              "Fetch links returned empty for chunkIndex=" + chunkIndex + " startRowOffset="
+                      + chunkStartRowOffset + " context=" + context;
       throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
     }
 
-    if (externalLinks.get(0).getRowOffset() > chunkStartRowOffset) {
-      String error = String.format("chunk start row offset mismatch expected=%d actual=%d " +
-                      "context=%s", chunkStartRowOffset, externalLinks.get(0).getRowOffset(),
-              context);
+    if (externalLinks.get(0).getRowOffset() != chunkStartRowOffset) {
+      String error =
+              "Chunk start row offset mismatch expected=" + chunkStartRowOffset + " actual="
+                      + externalLinks.get(0).getRowOffset() + " context=" + context;
       throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
     }
 
