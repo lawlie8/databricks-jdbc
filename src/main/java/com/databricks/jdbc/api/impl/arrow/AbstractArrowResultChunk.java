@@ -215,7 +215,7 @@ public abstract class AbstractArrowResultChunk {
    *
    * @return number of rows
    */
-  public long getNumRows() {
+  protected long getNumRows() {
     return numRows;
   }
 
