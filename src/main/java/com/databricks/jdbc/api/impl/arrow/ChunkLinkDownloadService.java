@@ -222,9 +222,8 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
         CompletableFuture.runAsync(
             () -> {
               try {
-                Collection<ExternalLink> links =
-                        session.getDatabricksClient().getResultChunks(
-                                statementId, batchStartIndex, batchStartRowOffset);
+                Collection<ExternalLink> links = session.getDatabricksClient()
+                        .getResultChunks(statementId, batchStartIndex, batchStartRowOffset);
                 LOGGER.info(
                     "Retrieved {} links for batch starting at {} for statement id {}",
                     links.size(),
@@ -426,8 +425,9 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
   private long getChunkStartRowOffset(long chunkIndex) {
     T chunk = chunkIndexToChunksMap.get(chunkIndex);
     if (chunk == null) {
-      // FIXME - throw exception?
-      return 0;
+      // Should never happen.
+      throw new IllegalStateException("Chunk not found in map for index " + chunkIndex + ". "
+              + "Total chunks: " + totalChunks + ", StatementId: " + statementId);
     }
     return chunk.getStartRowOffset();
   }
