@@ -191,6 +191,7 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
       session.setAutoCommit(autoCommit);
 
     } catch (SQLException e) {
+      LOGGER.error(e, "Error {} while setting autoCommit to {}", e.getMessage(), autoCommit);
       throw new DatabricksTransactionException(
           e.getMessage(), e, DatabricksDriverErrorCode.TRANSACTION_SET_AUTOCOMMIT_ERROR);
 
@@ -265,6 +266,7 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
       }
 
     } catch (SQLException e) {
+      LOGGER.error(e, "Error {} while fetching autoCommit state from server", e.getMessage());
       throw new DatabricksSQLException(
           "Failed to fetch autoCommit state from server: " + e.getMessage(),
           e,
@@ -322,6 +324,7 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
       // Note: Server auto-starts new transaction if autocommit=false
 
     } catch (SQLException e) {
+      LOGGER.error(e, "Error {} while committing transaction", e.getMessage());
       throw new DatabricksTransactionException(
           e.getMessage(), e, DatabricksDriverErrorCode.TRANSACTION_COMMIT_ERROR);
 
@@ -382,6 +385,7 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
       // Note: ROLLBACK is more forgiving - typically succeeds even on unexpected states
 
     } catch (SQLException e) {
+      LOGGER.error(e, "Error {} while rolling back transaction", e.getMessage());
       throw new DatabricksTransactionException(
           e.getMessage(), e, DatabricksDriverErrorCode.TRANSACTION_ROLLBACK_ERROR);
 
@@ -1028,7 +1032,7 @@ public class DatabricksConnection implements IDatabricksConnection, IDatabricksC
       try {
         statement.close();
       } catch (SQLException e) {
-        LOGGER.warn("Failed to close statement", e);
+        LOGGER.error(e, "Error closing statement: {}", e.getMessage());
       }
     }
   }
