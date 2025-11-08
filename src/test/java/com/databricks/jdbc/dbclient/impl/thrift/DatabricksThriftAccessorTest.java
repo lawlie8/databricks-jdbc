@@ -18,7 +18,6 @@ import com.databricks.jdbc.exception.DatabricksParsingException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.exception.DatabricksTimeoutException;
 import com.databricks.jdbc.model.client.thrift.generated.*;
-import com.databricks.jdbc.model.telemetry.latency.OperationType;
 import com.databricks.sdk.core.DatabricksConfig;
 import com.databricks.sdk.service.sql.StatementState;
 import java.sql.SQLException;
@@ -374,10 +373,12 @@ public class DatabricksThriftAccessorTest {
 
   @Test
   void testIncludeResultSetMetadataNotSetForOldProtocol()
-          throws TException, DatabricksSQLException {
+      throws TException, DatabricksSQLException {
     TOperationHandle operationHandle =
-            new TOperationHandle().setOperationId(handleIdentifier).setHasResultSet(false)
-                    .setOperationType(TOperationType.UNKNOWN);
+        new TOperationHandle()
+            .setOperationId(handleIdentifier)
+            .setHasResultSet(false)
+            .setOperationType(TOperationType.UNKNOWN);
 
     DatabricksThriftAccessor accessor = spy(new DatabricksThriftAccessor(connectionContext));
     doReturn(thriftClient).when(accessor).getThriftClient();

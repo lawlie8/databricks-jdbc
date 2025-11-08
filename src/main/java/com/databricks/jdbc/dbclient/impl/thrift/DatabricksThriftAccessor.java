@@ -10,7 +10,6 @@ import com.databricks.jdbc.api.internal.IDatabricksStatementInternal;
 import com.databricks.jdbc.common.DatabricksClientConfiguratorManager;
 import com.databricks.jdbc.common.StatementType;
 import com.databricks.jdbc.common.util.DatabricksThreadContextHolder;
-import com.databricks.jdbc.common.util.DatabricksThriftUtil;
 import com.databricks.jdbc.common.util.DriverUtil;
 import com.databricks.jdbc.common.util.ProtocolFeatureUtil;
 import com.databricks.jdbc.dbclient.impl.common.StatementId;
@@ -136,7 +135,8 @@ final class DatabricksThriftAccessor {
    * @return TFetchResultsResp containing the results
    * @throws DatabricksHttpException if fetch fails
    */
-  TFetchResultsResp getResultSetResp(TOperationHandle operationHandle) throws DatabricksHttpException {
+  TFetchResultsResp getResultSetResp(TOperationHandle operationHandle)
+      throws DatabricksHttpException {
     TFetchResultsReq req = createFetchResultsReqWithDefaults(operationHandle);
     return executeRequest(req);
   }
@@ -145,12 +145,12 @@ final class DatabricksThriftAccessor {
    * Fetches results starting from a specific row offset.
    *
    * @param operationHandle the operation handle
-   * @param startRowOffset  the row offset to start fetching from
+   * @param startRowOffset the row offset to start fetching from
    * @return TFetchResultsResp containing the results
    * @throws DatabricksHttpException if fetch fails
    */
   TFetchResultsResp getResultSetResp(TOperationHandle operationHandle, long startRowOffset)
-          throws DatabricksHttpException {
+      throws DatabricksHttpException {
     TFetchResultsReq req = createFetchResultsReqWithDefaults(operationHandle);
     req.setStartRowOffset(startRowOffset);
     return executeRequest(req);
@@ -185,7 +185,7 @@ final class DatabricksThriftAccessor {
   TFetchResultsResp getMoreResults(IDatabricksStatementInternal parentStatement)
       throws DatabricksSQLException {
     TFetchResultsReq req =
-            createFetchResultsReqWithDefaults(getOperationHandle(parentStatement.getStatementId()));
+        createFetchResultsReqWithDefaults(getOperationHandle(parentStatement.getStatementId()));
     setFetchMetadata(req);
     return executeRequest(req);
   }
@@ -239,12 +239,12 @@ final class DatabricksThriftAccessor {
         resultSet = response.getDirectResults().getResultSet();
         resultSet.setResultSetMetadata(response.getDirectResults().getResultSetMetadata());
       } else {
-        verifySuccessStatus(response.getStatus(), "executeStatement",
-                statementId.toSQLExecStatementId());
+        verifySuccessStatus(
+            response.getStatus(), "executeStatement", statementId.toSQLExecStatementId());
 
         // Fetch the result data after polling
         TFetchResultsReq resultsReq =
-                createFetchResultsReqWithDefaults(response.getOperationHandle());
+            createFetchResultsReqWithDefaults(response.getOperationHandle());
         setFetchMetadata(resultsReq);
         long fetchStartTime = System.nanoTime();
         resultSet = executeRequest(resultsReq);
@@ -406,8 +406,8 @@ final class DatabricksThriftAccessor {
       if (operationState == TOperationState.FINISHED_STATE) {
         long fetchStartTime = System.nanoTime();
 
-        verifySuccessStatus(response.getStatus(), "getStatementResult",
-                statementId.toSQLExecStatementId());
+        verifySuccessStatus(
+            response.getStatus(), "getStatementResult", statementId.toSQLExecStatementId());
 
         TFetchResultsReq resultsReq = createFetchResultsReqWithDefaults(operationHandle);
         resultsReq.setMaxRows(-1);
@@ -502,36 +502,37 @@ final class DatabricksThriftAccessor {
   }
 
   private TFetchResultsResp executeRequest(TFetchResultsReq request)
-          throws DatabricksHttpException {
+      throws DatabricksHttpException {
     TFetchResultsResp response;
     try {
       response = getThriftClient().FetchResults(request);
     } catch (TException e) {
-      String errorMessage = String.format(
-              "Error while fetching results from Thrift server. Request maxRows=%d, " +
-                      "maxBytes=%d, Error {%s}", request.getMaxRows(), request.getMaxBytes(),
-              e.getMessage());
+      String errorMessage =
+          String.format(
+              "Error while fetching results from Thrift server. Request maxRows=%d, "
+                  + "maxBytes=%d, Error {%s}",
+              request.getMaxRows(), request.getMaxBytes(), e.getMessage());
       throw new DatabricksHttpException(errorMessage, e, DatabricksDriverErrorCode.INVALID_STATE);
     }
 
     String statementId = StatementId.loggableStatementId(request.getOperationHandle());
     verifySuccessStatus(
-            response.getStatus(),
-            String.format(
-                    "Error while fetching results Request maxRows=%d, maxBytes=%d. " +
-                            "Response hasMoreRows=%s", request.getMaxRows(), request.getMaxBytes(),
-                    response.hasMoreRows),
-            statementId);
+        response.getStatus(),
+        String.format(
+            "Error while fetching results Request maxRows=%d, maxBytes=%d. "
+                + "Response hasMoreRows=%s",
+            request.getMaxRows(), request.getMaxBytes(), response.hasMoreRows),
+        statementId);
 
     return response;
   }
 
   private TFetchResultsReq createFetchResultsReqWithDefaults(TOperationHandle operationHandle) {
     return new TFetchResultsReq()
-            .setOperationHandle(operationHandle)
-            .setFetchType((short) 0) // 0 represents Query output. 1 represents Log
-            .setMaxRows(maxRowsPerBlock) // Max number of rows that should be returned in the rowset.
-            .setMaxBytes(DEFAULT_BYTE_LIMIT);
+        .setOperationHandle(operationHandle)
+        .setFetchType((short) 0) // 0 represents Query output. 1 represents Log
+        .setMaxRows(maxRowsPerBlock) // Max number of rows that should be returned in the rowset.
+        .setMaxBytes(DEFAULT_BYTE_LIMIT);
   }
 
   private void setFetchMetadata(TFetchResultsReq request) {

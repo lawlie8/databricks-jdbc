@@ -115,7 +115,8 @@ class ChunkLinkDownloadServiceTest {
         new DatabricksSQLException("Test error", DatabricksDriverErrorCode.INVALID_STATE);
     when(mockSession.getDatabricksClient()).thenReturn(mockClient);
     // Mock an error in response to the link request
-    when(mockClient.getResultChunks(eq(mockStatementId), anyLong(), anyLong())).thenThrow(expectedError);
+    when(mockClient.getResultChunks(eq(mockStatementId), anyLong(), anyLong()))
+        .thenThrow(expectedError);
     when(mockChunkMap.get(chunkIndex)).thenReturn(mock(ArrowResultChunk.class));
 
     ChunkLinkDownloadService<ArrowResultChunk> service =

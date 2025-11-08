@@ -71,12 +71,12 @@ public class DatabricksThriftUtil {
 
   public static ExternalLink createExternalLink(TSparkArrowResultLink chunkInfo, long chunkIndex) {
     return new ExternalLink()
-            .setExternalLink(chunkInfo.getFileLink())
-            .setChunkIndex(chunkIndex)
-            .setRowCount(chunkInfo.getRowCount())
-            .setRowOffset(chunkInfo.getStartRowOffset())
-            .setByteCount(chunkInfo.getBytesNum())
-            .setExpiration(Long.toString(chunkInfo.getExpiryTime()));
+        .setExternalLink(chunkInfo.getFileLink())
+        .setChunkIndex(chunkIndex)
+        .setRowCount(chunkInfo.getRowCount())
+        .setRowOffset(chunkInfo.getStartRowOffset())
+        .setByteCount(chunkInfo.getBytesNum())
+        .setExpiration(Long.toString(chunkInfo.getExpiryTime()));
   }
 
   public static void verifySuccessStatus(TStatus status, String errorContext)

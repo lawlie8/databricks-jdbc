@@ -396,47 +396,45 @@ public class DatabricksThriftServiceClientTest {
   @Test
   void testGetResultChunksEmptyLinksThrowsException() throws SQLException {
     DatabricksThriftServiceClient client =
-            new DatabricksThriftServiceClient(thriftAccessor, connectionContext);
+        new DatabricksThriftServiceClient(thriftAccessor, connectionContext);
     TFetchResultsResp response =
-            new TFetchResultsResp()
-                    .setStatus(new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS))
-                    .setResults(resultData)
-                    .setResultSetMetadata(resultMetadataData);
+        new TFetchResultsResp()
+            .setStatus(new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS))
+            .setResults(resultData)
+            .setResultSetMetadata(resultMetadataData);
     when(thriftAccessor.getResultSetResp(any(), eq(0L))).thenReturn(response);
     when(resultData.getResultLinks()).thenReturn(Collections.emptyList());
 
-    assertThrows(
-            DatabricksSQLException.class,
-            () -> client.getResultChunks(TEST_STMT_ID, 0, 0));
+    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 0, 0));
   }
 
   @Test
   void testGetResultChunksRowOffsetMismatchThrowsException() throws SQLException {
     DatabricksThriftServiceClient client =
-            new DatabricksThriftServiceClient(thriftAccessor, connectionContext);
+        new DatabricksThriftServiceClient(thriftAccessor, connectionContext);
 
     long requestedStartRowOffset = 1000L;
     long actualStartRowOffset = 500L;
 
     TSparkArrowResultLink resultLink =
-            new TSparkArrowResultLink()
-                    .setFileLink(TEST_STRING)
-                    .setStartRowOffset(actualStartRowOffset)
-                    .setRowCount(100)
-                    .setBytesNum(1024)
-                    .setExpiryTime(System.currentTimeMillis() + 3600000);
+        new TSparkArrowResultLink()
+            .setFileLink(TEST_STRING)
+            .setStartRowOffset(actualStartRowOffset)
+            .setRowCount(100)
+            .setBytesNum(1024)
+            .setExpiryTime(System.currentTimeMillis() + 3600000);
 
     TFetchResultsResp response =
-            new TFetchResultsResp()
-                    .setStatus(new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS))
-                    .setResults(resultData)
-                    .setResultSetMetadata(resultMetadataData);
+        new TFetchResultsResp()
+            .setStatus(new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS))
+            .setResults(resultData)
+            .setResultSetMetadata(resultMetadataData);
     when(thriftAccessor.getResultSetResp(any(), eq(requestedStartRowOffset))).thenReturn(response);
     when(resultData.getResultLinks()).thenReturn(Collections.singletonList(resultLink));
 
     assertThrows(
-            DatabricksSQLException.class,
-            () -> client.getResultChunks(TEST_STMT_ID, 5, requestedStartRowOffset));
+        DatabricksSQLException.class,
+        () -> client.getResultChunks(TEST_STMT_ID, 5, requestedStartRowOffset));
   }
 
   @Test

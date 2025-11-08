@@ -300,14 +300,14 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
 
   @Override
   public Collection<ExternalLink> getResultChunks(
-          StatementId statementId, long chunkIndex, long chunkStartRowOffset)
+      StatementId statementId, long chunkIndex, long chunkStartRowOffset)
       throws DatabricksSQLException {
     String context =
-            "public Collection<ExternalLink> getResultChunks(statementId = {"
-                    + statementId
-                    + "}, chunkIndex = {"
-                    + chunkIndex
-                    + "}) using Thrift client";
+        "public Collection<ExternalLink> getResultChunks(statementId = {"
+            + statementId
+            + "}, chunkIndex = {"
+            + chunkIndex
+            + "}) using Thrift client";
     LOGGER.debug(context);
     DatabricksThreadContextHolder.setStatementId(statementId);
 
@@ -317,25 +317,33 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
 
     // First fetch uses chunkStartRowOffset.
     fetchResultsResp =
-            thriftAccessor.getResultSetResp(getOperationHandle(statementId), chunkStartRowOffset);
+        thriftAccessor.getResultSetResp(getOperationHandle(statementId), chunkStartRowOffset);
     fetchResultsResp
-            .getResults()
-            .getResultLinks()
-            .forEach(
-                    resultLink ->
-                            externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
+        .getResults()
+        .getResultLinks()
+        .forEach(
+            resultLink ->
+                externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
 
     if (externalLinks.isEmpty()) {
       String error =
-              "Fetch links returned empty for chunkIndex=" + chunkIndex + " startRowOffset="
-                      + chunkStartRowOffset + " context=" + context;
+          "Fetch links returned empty for chunkIndex="
+              + chunkIndex
+              + " startRowOffset="
+              + chunkStartRowOffset
+              + " context="
+              + context;
       throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
     }
 
     if (externalLinks.get(0).getRowOffset() != chunkStartRowOffset) {
       String error =
-              "Chunk start row offset mismatch expected=" + chunkStartRowOffset + " actual="
-                      + externalLinks.get(0).getRowOffset() + " context=" + context;
+          "Chunk start row offset mismatch expected="
+              + chunkStartRowOffset
+              + " actual="
+              + externalLinks.get(0).getRowOffset()
+              + " context="
+              + context;
       throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
     }
 
