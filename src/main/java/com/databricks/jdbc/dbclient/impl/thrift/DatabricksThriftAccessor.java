@@ -138,7 +138,7 @@ final class DatabricksThriftAccessor {
   TFetchResultsResp getResultSetResp(TOperationHandle operationHandle)
       throws DatabricksHttpException {
     TFetchResultsReq req = createFetchResultsReqWithDefaults(operationHandle);
-    return executeRequest(req);
+    return executeFetchRequest(req);
   }
 
   /**
@@ -153,7 +153,7 @@ final class DatabricksThriftAccessor {
       throws DatabricksHttpException {
     TFetchResultsReq req = createFetchResultsReqWithDefaults(operationHandle);
     req.setStartRowOffset(startRowOffset);
-    return executeRequest(req);
+    return executeFetchRequest(req);
   }
 
   TCancelOperationResp cancelOperation(TCancelOperationReq req) throws DatabricksHttpException {
@@ -187,7 +187,7 @@ final class DatabricksThriftAccessor {
     TFetchResultsReq req =
         createFetchResultsReqWithDefaults(getOperationHandle(parentStatement.getStatementId()));
     setFetchMetadata(req);
-    return executeRequest(req);
+    return executeFetchRequest(req);
   }
 
   DatabricksResultSet execute(
@@ -247,7 +247,7 @@ final class DatabricksThriftAccessor {
             createFetchResultsReqWithDefaults(response.getOperationHandle());
         setFetchMetadata(resultsReq);
         long fetchStartTime = System.nanoTime();
-        resultSet = executeRequest(resultsReq);
+        resultSet = executeFetchRequest(resultsReq);
 
         long fetchEndTime = System.nanoTime();
         long fetchLatencyNanos = fetchEndTime - fetchStartTime;
@@ -402,17 +402,17 @@ final class DatabricksThriftAccessor {
     TFetchResultsResp resultSet = null;
     try {
       response = getOperationStatus(request, statementId);
+      verifySuccessStatus(
+          response.getStatus(), "getStatementResult", statementId.toSQLExecStatementId());
+
       TOperationState operationState = response.getOperationState();
       if (operationState == TOperationState.FINISHED_STATE) {
         long fetchStartTime = System.nanoTime();
 
-        verifySuccessStatus(
-            response.getStatus(), "getStatementResult", statementId.toSQLExecStatementId());
-
         TFetchResultsReq resultsReq = createFetchResultsReqWithDefaults(operationHandle);
         resultsReq.setMaxRows(-1);
         setFetchMetadata(resultsReq);
-        resultSet = executeRequest(resultsReq);
+        resultSet = executeFetchRequest(resultsReq);
 
         long fetchEndTime = System.nanoTime();
         long fetchLatencyNanos = fetchEndTime - fetchStartTime;
@@ -501,7 +501,7 @@ final class DatabricksThriftAccessor {
     this.databricksConfig = newConfig;
   }
 
-  private TFetchResultsResp executeRequest(TFetchResultsReq request)
+  private TFetchResultsResp executeFetchRequest(TFetchResultsReq request)
       throws DatabricksHttpException {
     TFetchResultsResp response;
     try {
@@ -687,7 +687,7 @@ final class DatabricksThriftAccessor {
 
       TFetchResultsReq resultsReq = createFetchResultsReqWithDefaults(operationHandle);
       resultsReq.setMaxRows(DEFAULT_ROW_LIMIT_PER_BLOCK);
-      return executeRequest(resultsReq);
+      return executeFetchRequest(resultsReq);
     }
   }
 
