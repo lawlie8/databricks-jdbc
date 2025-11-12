@@ -1073,6 +1073,11 @@ public class DatabricksConnectionContext implements IDatabricksConnectionContext
   }
 
   @Override
+  public boolean getFetchAutoCommitFromServer() {
+    return getParameter(DatabricksJdbcUrlParams.FETCH_AUTOCOMMIT_FROM_SERVER).equals("1");
+  }
+
+  @Override
   public TelemetryLogLevel getTelemetryLogLevel() {
     return TelemetryLogLevel.parse(
         getParameter(DatabricksJdbcUrlParams.TELEMETRY_LOG_LEVEL), TelemetryLogLevel.DEBUG);
@@ -1081,5 +1086,10 @@ public class DatabricksConnectionContext implements IDatabricksConnectionContext
   @Override
   public boolean isSeaSyncMetadataEnabled() {
     return getParameter(DatabricksJdbcUrlParams.ENABLE_SEA_SYNC_METADATA).equals("1");
+  }
+
+  @Override
+  public boolean getDisableOauthRefreshToken() {
+    return getParameter(DatabricksJdbcUrlParams.DISABLE_OAUTH_REFRESH_TOKEN, "1").equals("1");
   }
 }

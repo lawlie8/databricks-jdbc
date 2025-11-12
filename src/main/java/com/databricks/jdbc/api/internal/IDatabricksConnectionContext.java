@@ -388,6 +388,11 @@ public interface IDatabricksConnectionContext {
   /** Returns whether transaction-related method calls should be ignored */
   boolean getIgnoreTransactions();
 
+  /**
+   * Returns whether to fetch auto-commit state from server using SQL query instead of cached value
+   */
+  boolean getFetchAutoCommitFromServer();
+
   /* Returns whether metric view metadata is enabled */
   boolean getEnableMetricViewMetadata();
 
@@ -396,4 +401,7 @@ public interface IDatabricksConnectionContext {
    * synchronous metadata requests in SEA mode
    */
   boolean isSeaSyncMetadataEnabled();
+
+  /** Returns whether OAuth refresh tokens should be disabled (omit offline_access by default). */
+  boolean getDisableOauthRefreshToken();
 }
