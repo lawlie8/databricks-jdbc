@@ -35,10 +35,20 @@ jobs:
         run: |
           mvn -B -DskipTests package
 
+      - name: Sign thin JAR
+        run: |
+          VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+          THIN_JAR="target/databricks-jdbc-${VERSION}-thin.jar"
+          echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 --pinentry-mode loopback \
+            --armor --detach-sign "$THIN_JAR"
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
       - name: Verify thin jar exists
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
           test -f "target/databricks-jdbc-${VERSION}-thin.jar"
+          test -f "target/databricks-jdbc-${VERSION}-thin.jar.asc"
 
       - name: Publish Thin JAR as Separate Artifact to Maven Central
         run: |
