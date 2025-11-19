@@ -38,21 +38,52 @@ jobs:
       - name: Verify thin jar exists
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          test -f "target/databricks-jdbc-${VERSION}-oss-thin.jar"
+          test -f "target/databricks-jdbc-${VERSION}-thin.jar"
 
       - name: Publish Thin JAR as Separate Artifact to Maven Central
         run: |
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          mvn -Prelease gpg:sign-and-deploy-file \
-            -Dfile="target/databricks-jdbc-${VERSION}-oss-thin.jar" \
-            -DrepositoryId=central \
-            -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ \
-            -DgroupId=com.databricks \
-            -DartifactId=databricks-jdbc-thin \
-            -Dversion="${VERSION}" \
-            -Dpackaging=jar \
-            -DgeneratePom=true \
-            -Dgpg.passphrase="${GPG_PASSPHRASE}"
+          THIN_JAR="target/databricks-jdbc-${VERSION}-thin.jar"
+
+          echo "Creating deployment bundle for thin JAR..."
+
+          # Create staging directory
+          mkdir -p target/thin-staging/com/databricks/databricks-jdbc-thin/${VERSION}
+
+          # Copy thin JAR and its signature
+          cp "$THIN_JAR" target/thin-staging/com/databricks/databricks-jdbc-thin/${VERSION}/databricks-jdbc-thin-${VERSION}.jar
+          cp "${THIN_JAR}.asc" target/thin-staging/com/databricks/databricks-jdbc-thin/${VERSION}/databricks-jdbc-thin-${VERSION}.jar.asc
+
+          # Copy POM and sign it
+          cp thin_public_pom.xml target/thin-staging/com/databricks/databricks-jdbc-thin/${VERSION}/databricks-jdbc-thin-${VERSION}.pom
+          echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 --pinentry-mode loopback \
+            --armor --detach-sign \
+            target/thin-staging/com/databricks/databricks-jdbc-thin/${VERSION}/databricks-jdbc-thin-${VERSION}.pom
+
+          # Generate checksums
+          cd target/thin-staging/com/databricks/databricks-jdbc-thin/${VERSION}
+          for file in databricks-jdbc-thin-*; do
+            md5sum "$file" | awk '{print $1}' > "${file}.md5"
+            sha1sum "$file" | awk '{print $1}' > "${file}.sha1"
+          done
+          cd $GITHUB_WORKSPACE
+
+          # Create bundle ZIP
+          cd target/thin-staging
+          zip -r ../central-thin-bundle.zip com/
+          cd $GITHUB_WORKSPACE
+
+          echo "Uploading bundle to Maven Central Portal..."
+
+          # Upload to new Maven Central Portal
+          curl -X POST \
+            -u "$MAVEN_CENTRAL_USERNAME:$MAVEN_CENTRAL_PASSWORD" \
+            -F "bundle=@target/central-thin-bundle.zip" \
+            -F "publishingType=AUTOMATIC" \
+            -w "\nHTTP_STATUS:%{http_code}\n" \
+            https://central.sonatype.com/api/v1/publisher/upload
+
+          echo "Thin JAR published successfully!"
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -62,5 +93,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            target/*-oss-thin.jar
+            target/*-thin.jar
 
