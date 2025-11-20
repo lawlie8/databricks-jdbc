@@ -16,6 +16,7 @@
 - Call statements will return result sets in response
 
 ### Updated
+- Geospatial `getWKB()` now returns OGC-compliant WKB values.
 - Minimized OAuth requests by reducing calls in feature flags and telemetry.
 
 ### Fixed
