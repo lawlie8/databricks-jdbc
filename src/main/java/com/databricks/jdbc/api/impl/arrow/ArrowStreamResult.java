@@ -262,7 +262,7 @@ public class ArrowStreamResult implements IExecutionResult {
   /**
    * Returns the chunk provider for testing purposes.
    *
-   * @return the chunk provider wrapped in Optional
+   * @return the chunk provider
    */
   @VisibleForTesting
   public ChunkProvider getChunkProvider() {

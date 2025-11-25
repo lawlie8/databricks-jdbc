@@ -304,11 +304,10 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
       StatementId statementId, long chunkIndex, long chunkStartRowOffset)
       throws DatabricksSQLException {
     String context =
-        "public Collection<ExternalLink> getResultChunks(statementId = {"
-            + statementId
-            + "}, chunkIndex = {"
-            + chunkIndex
-            + "}) using Thrift client";
+        String.format(
+            "public Collection<ExternalLink> getResultChunk(String statementId = {%s}, "
+                + "long chunkIndex = {%s}, long chunkStartRowOffset = {%d}) using Thrift client",
+            statementId, chunkIndex, chunkStartRowOffset);
     LOGGER.debug(context);
     DatabricksThreadContextHolder.setStatementId(statementId);
 
