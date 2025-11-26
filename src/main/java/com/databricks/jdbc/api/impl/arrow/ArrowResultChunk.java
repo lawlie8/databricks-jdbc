@@ -213,8 +213,30 @@ public class ArrowResultChunk extends AbstractArrowResultChunk {
       return this;
     }
 
+    public Builder withChunkLink(ExternalLink chunkLink) {
+      this.chunkLink = chunkLink;
+      return this;
+    }
+
+    public Builder withRowOffset(long rowOffset) {
+      this.rowOffset = rowOffset;
+      return this;
+    }
+
+    public Builder withChunkIndex(long chunkIndex) {
+      this.chunkIndex = chunkIndex;
+      return this;
+    }
+
+    public Builder withExpiryTime(Instant expiryTime) {
+      this.expiryTime = expiryTime;
+      return this;
+    }
+
     public ArrowResultChunk build() throws DatabricksParsingException {
       return new ArrowResultChunk(this);
     }
+
+
   }
 }

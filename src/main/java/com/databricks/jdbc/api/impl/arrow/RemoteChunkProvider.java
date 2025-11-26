@@ -6,12 +6,16 @@ import com.databricks.jdbc.common.CompressionCodec;
 import com.databricks.jdbc.common.util.DatabricksThreadContextHolder;
 import com.databricks.jdbc.dbclient.IDatabricksHttpClient;
 import com.databricks.jdbc.dbclient.impl.common.StatementId;
+import com.databricks.jdbc.exception.DatabricksParsingException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
 import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
+import com.databricks.jdbc.model.core.ExternalLink;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
 import com.databricks.sdk.service.sql.BaseChunkInfo;
+
+import java.time.Instant;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -103,15 +107,17 @@ public class RemoteChunkProvider extends AbstractRemoteChunkProvider<ArrowResult
    * chunk downloads.
    */
   @Override
-  public void downloadNextChunks() {
+  public void downloadNextChunks() throws DatabricksSQLException {
     if (chunkDownloaderExecutorService == null) {
       chunkDownloaderExecutorService = createChunksDownloaderExecutorService();
     }
 
     while (!isClosed
-        && nextChunkToDownload < chunkCount
+        && linkDownloadService.hasNextLink()
         && totalChunksInMemory < allowedChunksInMemory) {
-      ArrowResultChunk chunk = chunkIndexToChunksMap.get(nextChunkToDownload);
+      // TODO what happens if this fails?
+      ExternalLink link = linkDownloadService.nextChunkLink();
+      ArrowResultChunk chunk = createChunk(link);
       chunkDownloaderExecutorService.submit(
           new ChunkDownloadTask(chunk, httpClient, this, linkDownloadService));
       totalChunksInMemory++;
@@ -119,12 +125,25 @@ public class RemoteChunkProvider extends AbstractRemoteChunkProvider<ArrowResult
     }
   }
 
+  private ArrowResultChunk createChunk(ExternalLink link) throws DatabricksParsingException {
+    // TODO add more data? Do not throw exception.
+    return ArrowResultChunk.builder()
+        .withChunkStatus(ChunkStatus.URL_FETCHED)
+        .withStatementId(statementId)
+        .withChunkReadyTimeoutSeconds(chunkReadyTimeoutSeconds)
+        .withRowOffset(link.getRowOffset())
+        .withChunkIndex(link.getChunkIndex())
+        .withChunkLink(link)
+        .withExpiryTime(Instant.parse(link.getExpiration()))
+        .build();
+  }
+
   /** {@inheritDoc} */
   @Override
   protected void doClose() {
     isClosed = true;
     chunkDownloaderExecutorService.shutdownNow();
-    chunkIndexToChunksMap.values().forEach(ArrowResultChunk::releaseChunk);
+    linkDownloadService.shutdown();
     DatabricksThreadContextHolder.clearStatementInfo();
   }
 

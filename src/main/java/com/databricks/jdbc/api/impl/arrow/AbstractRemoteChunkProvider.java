@@ -43,8 +43,6 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
   protected final StatementId statementId;
   protected final IDatabricksHttpClient httpClient;
   protected final CompressionCodec compressionCodec;
-  protected final ConcurrentMap<Long, T> chunkIndexToChunksMap;
-  protected long chunkCount;
   protected long rowCount;
   protected long currentChunkIndex;
   protected long nextChunkToDownload;
@@ -73,17 +71,17 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
     this.httpClient = httpClient;
     this.statementId = statementId;
     this.compressionCodec = compressionCodec;
-    this.chunkCount = resultManifest.getTotalChunkCount();
+
+    Long totalChunkCount = resultManifest.getTotalChunkCount();
     this.rowCount = resultManifest.getTotalRowCount();
-    this.chunkIndexToChunksMap = initializeChunksMap(resultManifest, resultData, statementId);
+
+    ConcurrentMap<Long, T> chunkIndexToChunksMap =
+        initializeChunksMap(resultManifest, resultData, statementId);
+
     this.linkDownloadService =
         new ChunkLinkDownloadService<>(
-            session,
-            statementId,
-            chunkCount,
-            chunkIndexToChunksMap,
-            resultData.getExternalLinks() != null ? resultData.getExternalLinks().size() : 1);
-    TelemetryCollector.getInstance().recordTotalChunks(statementId, chunkCount);
+            session, statementId, totalChunkCount, chunkIndexToChunksMap);
+    TelemetryCollector.getInstance().recordTotalChunks(statementId, totalChunkCount);
     initializeData();
   }
 
@@ -101,10 +99,11 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
     this.httpClient = httpClient;
     this.statementId = parentStatement.getStatementId();
     this.compressionCodec = compressionCodec;
-    this.chunkIndexToChunksMap = initializeChunksMap(resultsResp, parentStatement, session);
+
+    ConcurrentMap<Long, T> chunkIndexToChunksMap =
+        initializeChunksMap(resultsResp, parentStatement, session);
     this.linkDownloadService =
-        new ChunkLinkDownloadService<>(
-            session, statementId, chunkCount, chunkIndexToChunksMap, chunkCount);
+        new ChunkLinkDownloadService<>(session, statementId, -1, chunkIndexToChunksMap);
     initializeData();
   }
 
@@ -242,6 +241,7 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
       return chunkIndexMap;
     }
 
+    // TODO check if all the data is required.
     for (BaseChunkInfo chunkInfo : resultManifest.getChunks()) {
       LOGGER.debug("Manifest chunk information: " + chunkInfo.toString());
       chunkIndexMap.put(
@@ -263,10 +263,8 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
       throws DatabricksSQLException {
     ConcurrentMap<Long, T> chunkIndexMap = new ConcurrentHashMap<>();
     populateChunkIndexMap(resultsResp.getResults(), chunkIndexMap);
-    while (resultsResp.hasMoreRows) {
-      resultsResp = session.getDatabricksClient().getMoreResults(parentStatement);
-      populateChunkIndexMap(resultsResp.getResults(), chunkIndexMap);
-    }
+
+    // TODO - move this to ChunkLinkDownloadService.
     TelemetryCollector.getInstance().recordTotalChunks(statementId, chunkCount);
     return chunkIndexMap;
   }

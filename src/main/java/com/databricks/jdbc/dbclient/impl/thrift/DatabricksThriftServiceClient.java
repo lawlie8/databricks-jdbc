@@ -310,7 +310,6 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
     TFetchResultsResp fetchResultsResp;
     List<ExternalLink> externalLinks = new ArrayList<>();
     AtomicInteger index = new AtomicInteger(0);
-    do {
       fetchResultsResp = thriftAccessor.getResultSetResp(getOperationHandle(statementId), context);
       fetchResultsResp
           .getResults()
@@ -318,12 +317,19 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
           .forEach(
               resultLink ->
                   externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
-    } while (fetchResultsResp.hasMoreRows);
+
     if (chunkIndex < 0 || externalLinks.size() <= chunkIndex) {
       String error = String.format("Out of bounds error for chunkIndex. Context: %s", context);
       LOGGER.error(error);
       throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
     }
+
+    if (!fetchResultsResp.hasMoreRows && !externalLinks.isEmpty()) {
+      // TODO Create a flag to indicate no more results.
+      externalLinks.get(externalLinks.size() - 1).setNextChunkIndex(-1L);
+    }
+
+
     return externalLinks;
   }
 

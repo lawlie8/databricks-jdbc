@@ -23,7 +23,6 @@ class ChunkDownloadTask implements DatabricksCallableTask {
   private final ChunkDownloadManager chunkDownloader;
   private final IDatabricksConnectionContext connectionContext;
   private final String statementId;
-  private final ChunkLinkDownloadService<ArrowResultChunk> linkDownloadService;
   Throwable uncaughtException = null;
 
   ChunkDownloadTask(
@@ -36,7 +35,6 @@ class ChunkDownloadTask implements DatabricksCallableTask {
     this.chunkDownloader = chunkDownloader;
     this.connectionContext = DatabricksThreadContextHolder.getConnectionContext();
     this.statementId = DatabricksThreadContextHolder.getStatementId();
-    this.linkDownloadService = linkDownloadService;
   }
 
   @Override
@@ -52,14 +50,6 @@ class ChunkDownloadTask implements DatabricksCallableTask {
       DatabricksThreadContextHolder.setRetryCount(retries);
       while (!downloadSuccessful) {
         try {
-          if (chunk.isChunkLinkInvalid()) {
-            ExternalLink link =
-                linkDownloadService
-                    .getLinkForChunk(chunk.getChunkIndex())
-                    .get(); // Block until link is available
-            chunk.setChunkLink(link);
-          }
-
           chunk.downloadData(
               httpClient,
               chunkDownloader.getCompressionCodec(),
