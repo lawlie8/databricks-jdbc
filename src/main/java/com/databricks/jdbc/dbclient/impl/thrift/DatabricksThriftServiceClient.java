@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabricksMetadataClient {
@@ -320,7 +321,7 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
     //    }
 
     List<ExternalLink> externalLinks = new ArrayList<>();
-    AtomicInteger index = new AtomicInteger(0);
+    AtomicLong index = new AtomicLong(chunkIndex);
     List<TSparkArrowResultLink> resultLinks = fetchResultsResp.getResults().getResultLinks();
     for (int i = 0; i < resultLinks.size(); i++) {
       // TODO Create a flag to indicate no more results.

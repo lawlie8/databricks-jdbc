@@ -70,7 +70,10 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
 
   private final IDatabricksSession session;
   private final StatementId statementId;
+
+  /** TODO also add nextStartRowOffset and validate the fetched links */
   private final AtomicLong nextBatchStartIndex;
+
   private final AtomicBoolean isDownloadInProgress;
   private final int maxLinksThreshold;
   private volatile boolean isShutdown;
@@ -114,7 +117,7 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
 
     // TODO is this correct, can there be another value?
     this.maxLinksThreshold = session.getConnectionContext().getCloudFetchThreadPoolSize() * 2;
-    this.chunkLinks = new LinkedBlockingQueue<>(this.maxLinksThreshold);
+    this.chunkLinks = new LinkedBlockingQueue<>(Integer.MAX_VALUE);
 
     chunkLinks.stream()
         .sorted(Comparator.comparing(ExternalLink::getChunkIndex))
@@ -183,11 +186,26 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
     }
 
     final long batchStartIndex = nextBatchStartIndex.get();
-    LOGGER.info("Starting batch download from index {}", batchStartIndex);
+
+    // TODO cleanup setting isDownloadInProgress to false. It is present at many return points of
+    // the function.
 
     if (isTotalChunksDiscovered() && batchStartIndex >= totalChunks.get()) {
+      LOGGER.debug("Fetched al chunks {}, current index {}", totalChunks.get(), batchStartIndex);
+      isDownloadInProgress.set(false);
       return;
     }
+
+    if (chunkLinks.size() > maxLinksThreshold) {
+      LOGGER.debug(
+          "Pausing link download from index {}, max threshold {} hit",
+          batchStartIndex,
+          maxLinksThreshold);
+      isDownloadInProgress.set(false);
+      return;
+    }
+
+    LOGGER.info("Starting batch download from index {}", batchStartIndex);
 
     currentDownloadTask =
         CompletableFuture.runAsync(
@@ -210,8 +228,9 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
                           .max(Comparator.comparingLong(ExternalLink::getChunkIndex))
                           .get(); // TODO should fix this?
 
-                  // TODO should not be -1.
                   if (lastChunk.isLastChunk()) {
+                    LOGGER.debug(
+                        "Setting total chunk to {} for statement id {}", lastChunk, statementId);
                     totalChunks.set(lastChunk.getChunkIndex() + 1);
                   }
 
@@ -220,7 +239,14 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
                       "Updated next batch start index to {}", lastChunk.getChunkIndex() + 1);
                 }
 
+                // Mark current download as complete and trigger next batch
+                isDownloadInProgress.set(false);
+
                 if (chunkLinks.size() > maxLinksThreshold) {
+                  LOGGER.debug(
+                      "Pausing link download from index {}, max threshold {} hit",
+                      nextBatchStartIndex.get(),
+                      maxLinksThreshold);
                   return;
                 }
 
@@ -228,13 +254,15 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
                 if (!isTotalChunksDiscovered() || nextBatchStartIndex.get() < totalChunks.get()) {
                   LOGGER.debug("Triggering next batch download");
                   triggerNextBatchDownload();
+                } else {
+                  LOGGER.debug(
+                      "Total chunks discovered: {}, next batch start index {}",
+                      totalChunks.get(),
+                      nextBatchStartIndex.get());
                 }
               } catch (DatabricksSQLException e) {
                 // If the download fails, complete exceptionally all pending futures
                 handleBatchDownloadError(batchStartIndex, e);
-              } finally {
-                // Mark current download as complete and trigger next batch
-                isDownloadInProgress.set(false);
               }
             });
   }
@@ -280,14 +308,14 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
     try {
       // TODO blocking indefinitely here?
       // TODO can the link be continuously expired?
-      while (true) {
-        ExternalLink link = pollNextLink();
-        if (!isChunkLinkExpired(link)) {
-          return link;
-        }
-
+      ExternalLink link = pollNextLink();
+      while (isChunkLinkExpired(link)) {
         triggerNextBatchDownload();
+        link = pollNextLink();
       }
+
+      triggerNextBatchDownload();
+      return link;
     } catch (InterruptedException e) {
       // TODO handle thread cancellation.
       Thread.currentThread().interrupt();
