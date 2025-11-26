@@ -307,28 +307,27 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
             statementId, chunkIndex);
     LOGGER.debug(context);
     DatabricksThreadContextHolder.setStatementId(statementId);
-    TFetchResultsResp fetchResultsResp;
+
+    TFetchResultsResp fetchResultsResp =
+        thriftAccessor.getResultSetResp(getOperationHandle(statementId), context);
+
+    // TODO what checks to add.
+    //    if (chunkIndex < 0 || externalLinks.size() <= chunkIndex) {
+    //      String error = String.format("Out of bounds error for chunkIndex. Context: %s",
+    // context);
+    //      LOGGER.error(error);
+    //      throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
+    //    }
+
     List<ExternalLink> externalLinks = new ArrayList<>();
     AtomicInteger index = new AtomicInteger(0);
-      fetchResultsResp = thriftAccessor.getResultSetResp(getOperationHandle(statementId), context);
-      fetchResultsResp
-          .getResults()
-          .getResultLinks()
-          .forEach(
-              resultLink ->
-                  externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
-
-    if (chunkIndex < 0 || externalLinks.size() <= chunkIndex) {
-      String error = String.format("Out of bounds error for chunkIndex. Context: %s", context);
-      LOGGER.error(error);
-      throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
-    }
-
-    if (!fetchResultsResp.hasMoreRows && !externalLinks.isEmpty()) {
+    List<TSparkArrowResultLink> resultLinks = fetchResultsResp.getResults().getResultLinks();
+    for (int i = 0; i < resultLinks.size(); i++) {
       // TODO Create a flag to indicate no more results.
-      externalLinks.get(externalLinks.size() - 1).setNextChunkIndex(-1L);
+      boolean isLastChunk = !fetchResultsResp.hasMoreRows && i == resultLinks.size() - 1;
+      TSparkArrowResultLink resultLink = resultLinks.get(i);
+      externalLinks.add(createExternalLink(resultLink, index.getAndIncrement(), isLastChunk));
     }
-
 
     return externalLinks;
   }

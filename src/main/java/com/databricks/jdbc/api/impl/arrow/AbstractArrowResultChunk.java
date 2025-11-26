@@ -148,7 +148,7 @@ public abstract class AbstractArrowResultChunk {
    */
   public void setChunkLink(ExternalLink chunk) {
     chunkLink = chunk;
-    expiryTime = Instant.parse(chunk.getExpiration());
+    expiryTime = chunk.parseExpiration();
     setStatus(ChunkStatus.URL_FETCHED);
   }
 
@@ -283,11 +283,11 @@ public abstract class AbstractArrowResultChunk {
    */
   protected void initializeData(InputStream inputStream)
       throws DatabricksSQLException, IOException {
-    LOGGER.debug("Parsing data for chunk index %s and statement %s", chunkIndex, statementId);
+    LOGGER.debug("Parsing data for chunk index {} and statement {}", chunkIndex, statementId);
     ArrowData arrowData = getRecordBatchList(inputStream, rootAllocator, statementId, chunkIndex);
     recordBatchList = arrowData.getValueVectors();
     arrowMetadata = arrowData.getMetadata();
-    LOGGER.debug("Data parsed for chunk index %s and statement %s", chunkIndex, statementId);
+    LOGGER.debug("Data parsed for chunk index {} and statement {}", chunkIndex, statementId);
     setStatus(ChunkStatus.PROCESSING_SUCCEEDED);
   }
 

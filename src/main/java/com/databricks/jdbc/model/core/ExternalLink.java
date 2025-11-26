@@ -2,6 +2,8 @@ package com.databricks.jdbc.model.core;
 
 import com.databricks.sdk.support.ToStringer;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 
@@ -38,6 +40,8 @@ public class ExternalLink {
   @JsonProperty("row_offset")
   private Long rowOffset;
 
+  private boolean isLastChunk;
+
   public ExternalLink setByteCount(Long byteCount) {
     this.byteCount = byteCount;
     return this;
@@ -65,6 +69,18 @@ public class ExternalLink {
     return expiration;
   }
 
+  // FIXME
+  public Instant parseExpiration() {
+    try {
+      long millis = Long.parseLong(expiration);
+      Instant expirationWithBuffer = Instant.ofEpochMilli(millis).minusSeconds(60);
+      return expirationWithBuffer;
+    } catch (NumberFormatException e) {
+      Instant expirationWithBuffer = Instant.parse(expiration).minusSeconds(60);
+      return expirationWithBuffer;
+    }
+  }
+
   public ExternalLink setExternalLink(String externalLink) {
     this.externalLink = externalLink;
     return this;
@@ -83,13 +99,13 @@ public class ExternalLink {
     return externalLink;
   }
 
-  public ExternalLink setNextChunkIndex(Long nextChunkIndex) {
-    this.nextChunkIndex = nextChunkIndex;
-    return this;
+  public boolean isLastChunk() {
+    return this.isLastChunk;
   }
 
-  public Long getNextChunkIndex() {
-    return nextChunkIndex;
+  public ExternalLink setIsLastChunk(Boolean isLastChunk) {
+    this.isLastChunk = isLastChunk;
+    return this;
   }
 
   public ExternalLink setNextChunkInternalLink(String nextChunkInternalLink) {

@@ -10,14 +10,14 @@ import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.core.ExternalLink;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,22 +77,30 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
   private volatile CompletableFuture<Void> currentDownloadTask;
 
   /** An ordered queue of chunk links. */
-  private final BlockingQueue<ExternalLink> chunkLinks = new LinkedBlockingQueue<>();
+  private final BlockingQueue<ExternalLink> chunkLinks;
 
   /** The total number of chunks. */
-  private final AtomicLong totalChunks = new AtomicLong(-1);
-
-  /** The next chunk link index to be consumed */
-  private final AtomicLong totalChunksInMemory = new AtomicLong(-1);
+  private final AtomicLong totalChunks = new AtomicLong(TOTAL_CHUNKS_UNKNOWN);
 
   /** Download error if any */
   private final AtomicReference<DatabricksSQLException> downloadException = new AtomicReference<>();
+
+  /** Value representing that the total chunks is not yet known. */
+  private static final long TOTAL_CHUNKS_UNKNOWN = -1L;
+
+  /** Value representing the chunk start index starts at zero. */
+  private static final long CHUNK_START_INDEX = 0L;
+
+  public ChunkLinkDownloadService(
+      IDatabricksSession session, StatementId statementId, List<ExternalLink> chunkLinks) {
+    this(session, statementId, TOTAL_CHUNKS_UNKNOWN, chunkLinks);
+  }
 
   public ChunkLinkDownloadService(
       IDatabricksSession session,
       StatementId statementId,
       long totalChunks,
-      ConcurrentMap<Long, T> chunkIndexToChunksMap) {
+      List<ExternalLink> chunkLinks) {
     LOGGER.info(
         "Initializing ChunkLinkDownloadService for statement {} with total chunks: {}, starting at index: {}",
         statementId,
@@ -106,20 +114,25 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
 
     // TODO is this correct, can there be another value?
     this.maxLinksThreshold = session.getConnectionContext().getCloudFetchThreadPoolSize() * 2;
+    this.chunkLinks = new LinkedBlockingQueue<>(this.maxLinksThreshold);
 
-    chunkIndexToChunksMap.entrySet().stream()
-        .filter(e -> e.getValue().chunkLink != null)
-        .sorted(Map.Entry.comparingByKey())
-        .forEach(e -> chunkLinks.add(e.getValue().chunkLink));
+    chunkLinks.stream()
+        .sorted(Comparator.comparing(ExternalLink::getChunkIndex))
+        .forEach(this.chunkLinks::add);
 
     // TODO check correctness.
-    long nextBatchStartIndex =
-        chunkIndexToChunksMap.entrySet().stream().max(Map.Entry.comparingByKey()).get().getKey()
-            + 1;
-    this.nextBatchStartIndex = new AtomicLong(nextBatchStartIndex);
+    if (!chunkLinks.isEmpty()) {
+      ExternalLink lastChunk =
+          chunkLinks.stream().max(Comparator.comparing(ExternalLink::getChunkIndex)).get();
+      if (lastChunk.isLastChunk()) {
+        this.totalChunks.set(lastChunk.getChunkIndex() + 1);
+      }
+      this.nextBatchStartIndex = new AtomicLong(lastChunk.getChunkIndex() + 1);
+    } else {
+      this.nextBatchStartIndex = new AtomicLong(CHUNK_START_INDEX);
+    }
 
     // TODO can there be gaps in the links.
-
     triggerNextBatchDownload();
   }
 
@@ -158,63 +171,72 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
       return;
     }
 
+    // TODO handle expired links here.
+    ArrayList<ExternalLink> allLinks = new ArrayList<>();
+    chunkLinks.drainTo(allLinks);
+    for (ExternalLink link : allLinks) {
+      if (isChunkLinkExpired(link)) {
+        break;
+      }
+      chunkLinks.add(link);
+      nextBatchStartIndex.set(link.getChunkIndex() + 1);
+    }
+
     final long batchStartIndex = nextBatchStartIndex.get();
     LOGGER.info("Starting batch download from index {}", batchStartIndex);
+
+    if (isTotalChunksDiscovered() && batchStartIndex >= totalChunks.get()) {
+      return;
+    }
 
     currentDownloadTask =
         CompletableFuture.runAsync(
             () -> {
               try {
-                fetchNextChunkLinks(batchStartIndex);
+                Collection<ExternalLink> links =
+                    session.getDatabricksClient().getResultChunks(statementId, batchStartIndex);
+                LOGGER.info(
+                    "Retrieved {} links for batch starting at {} for statement id {}",
+                    links.size(),
+                    batchStartIndex,
+                    statementId);
 
-                // Mark current download as complete and trigger next batch
-                isDownloadInProgress.set(false);
+                chunkLinks.addAll(links);
+
+                // TODO better way to do this?
+                if (!links.isEmpty()) {
+                  ExternalLink lastChunk =
+                      links.stream()
+                          .max(Comparator.comparingLong(ExternalLink::getChunkIndex))
+                          .get(); // TODO should fix this?
+
+                  // TODO should not be -1.
+                  if (lastChunk.isLastChunk()) {
+                    totalChunks.set(lastChunk.getChunkIndex() + 1);
+                  }
+
+                  nextBatchStartIndex.set(lastChunk.getChunkIndex() + 1);
+                  LOGGER.debug(
+                      "Updated next batch start index to {}", lastChunk.getChunkIndex() + 1);
+                }
 
                 if (chunkLinks.size() > maxLinksThreshold) {
                   return;
                 }
 
                 // FIXME.
-                if (totalChunks.get() == -1 || nextBatchStartIndex.get() < totalChunks.get()) {
+                if (!isTotalChunksDiscovered() || nextBatchStartIndex.get() < totalChunks.get()) {
                   LOGGER.debug("Triggering next batch download");
                   triggerNextBatchDownload();
                 }
               } catch (DatabricksSQLException e) {
                 // If the download fails, complete exceptionally all pending futures
                 handleBatchDownloadError(batchStartIndex, e);
+              } finally {
+                // Mark current download as complete and trigger next batch
+                isDownloadInProgress.set(false);
               }
             });
-  }
-
-  private void fetchNextChunkLinks(long chunkIndex) throws DatabricksSQLException {
-    // TODO does a lot of things, reduce the number of responsibilities of this
-    //  function.
-
-    Collection<ExternalLink> links =
-        session.getDatabricksClient().getResultChunks(statementId, chunkIndex);
-    LOGGER.info(
-        "Retrieved {} links for batch starting at {} for statement id {}",
-        links.size(),
-        chunkIndex,
-        statementId);
-
-    chunkLinks.addAll(links);
-
-    // TODO better way to do this?
-    if (!links.isEmpty()) {
-      ExternalLink lastChunk =
-          links.stream()
-              .max(Comparator.comparingLong(ExternalLink::getChunkIndex))
-              .get(); // TODO should fix this?
-
-      // TODO should not be -1.
-      if (lastChunk.getNextChunkIndex() == -1) {
-        totalChunks.set(lastChunk.getChunkIndex() + 1);
-      }
-
-      nextBatchStartIndex.set(lastChunk.getChunkIndex() + 1);
-      LOGGER.debug("Updated next batch start index to {}", lastChunk.getChunkIndex() + 1);
-    }
   }
 
   /**
@@ -236,24 +258,13 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
     isDownloadInProgress.set(false);
   }
 
-  /**
-   * Creates a CompletableFuture that is already completed exceptionally with the given exception.
-   */
-  private CompletableFuture<ExternalLink> createExceptionalFuture(Exception e) {
-    CompletableFuture<ExternalLink> future = new CompletableFuture<>();
-    future.completeExceptionally(e);
-    return future;
-  }
-
   private boolean isChunkLinkExpired(ExternalLink link) {
     if (link == null || link.getExpiration() == null) {
       LOGGER.warn("Link or expiration is null, assuming link is expired");
       return true;
     }
-    Instant expirationWithBuffer =
-        Instant.parse(link.getExpiration()).minusSeconds(SECONDS_BUFFER_FOR_EXPIRY);
 
-    return expirationWithBuffer.isBefore(Instant.now());
+    return link.parseExpiration().isBefore(Instant.now());
   }
 
   public ExternalLink nextChunkLink() throws DatabricksSQLException {
@@ -268,38 +279,47 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
 
     try {
       // TODO blocking indefinitely here?
-      ExternalLink link = chunkLinks.take();
-      if (isChunkLinkExpired(link)) {
-        // TODO trigger download of chunks.
+      // TODO can the link be continuously expired?
+      while (true) {
+        ExternalLink link = pollNextLink();
+        if (!isChunkLinkExpired(link)) {
+          return link;
+        }
 
-        // Clear the queue of links. All links will have expired.
-        chunkLinks.clear();
-
-        // Download next set of links.
-        // FIXME can this run concurrently with triggerNextBatchDownload?
-        fetchNextChunkLinks(link.getChunkIndex());
+        triggerNextBatchDownload();
       }
-
-      // Trigger the next set of downloadNextLinks.
-      // TODO is this correct?
-      triggerNextBatchDownload();
-
-      // TODO blocking indefinitely.
-      return chunkLinks.take();
     } catch (InterruptedException e) {
       // TODO handle thread cancellation.
       Thread.currentThread().interrupt();
       throw new RuntimeException(e);
-    } catch (DatabricksSQLException e) {
-      // TODO handle the exception.
-      throw new RuntimeException(e);
+    }
+  }
+
+  private ExternalLink pollNextLink() throws InterruptedException, DatabricksSQLException {
+    while (true) {
+      ExternalLink nextLink = chunkLinks.poll(100, TimeUnit.MILLISECONDS);
+      if (downloadException.get() != null) {
+        throw downloadException.get();
+      }
+      if (nextLink != null) {
+        return nextLink;
+      }
     }
   }
 
   public boolean hasNextLink() {
     // TODO check logic.
-    return totalChunks.get() == -1
-        || !chunkLinks.isEmpty()
+    return !chunkLinks.isEmpty()
+        || totalChunks.get() == TOTAL_CHUNKS_UNKNOWN
         || nextBatchStartIndex.get() < totalChunks.get();
+  }
+
+  public boolean isTotalChunksDiscovered() {
+    return totalChunks.get() != TOTAL_CHUNKS_UNKNOWN;
+  }
+
+  public Long getTotalChunks() {
+    // FIX this logic.
+    return totalChunks.get() == TOTAL_CHUNKS_UNKNOWN ? 0 : totalChunks.get();
   }
 }

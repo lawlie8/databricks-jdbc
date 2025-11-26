@@ -13,8 +13,8 @@ import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
 import com.databricks.jdbc.model.core.ExternalLink;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
+import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.sdk.service.sql.BaseChunkInfo;
-
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -61,30 +61,6 @@ public class RemoteChunkProvider extends AbstractRemoteChunkProvider<ArrowResult
         compressionCodec);
   }
 
-  /** {@inheritDoc} */
-  @Override
-  protected ArrowResultChunk createChunk(
-      StatementId statementId, long chunkIndex, BaseChunkInfo chunkInfo)
-      throws DatabricksSQLException {
-    return ArrowResultChunk.builder()
-        .withStatementId(statementId)
-        .withChunkInfo(chunkInfo)
-        .withChunkReadyTimeoutSeconds(chunkReadyTimeoutSeconds)
-        .build();
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  protected ArrowResultChunk createChunk(
-      StatementId statementId, long chunkIndex, TSparkArrowResultLink resultLink)
-      throws DatabricksSQLException {
-    return ArrowResultChunk.builder()
-        .withStatementId(statementId)
-        .withThriftChunkInfo(chunkIndex, resultLink)
-        .withChunkReadyTimeoutSeconds(chunkReadyTimeoutSeconds)
-        .build();
-  }
-
   /**
    * {@inheritDoc}
    *
@@ -118,6 +94,13 @@ public class RemoteChunkProvider extends AbstractRemoteChunkProvider<ArrowResult
       // TODO what happens if this fails?
       ExternalLink link = linkDownloadService.nextChunkLink();
       ArrowResultChunk chunk = createChunk(link);
+
+      if (chunkIndexToChunksMap.putIfAbsent(chunk.getChunkIndex(), chunk) != null) {
+        throw new DatabricksSQLException(
+            "Chunk " + chunk + " already present in map" + chunkIndexToChunksMap,
+            DatabricksDriverErrorCode.INVALID_STATE);
+      }
+
       chunkDownloaderExecutorService.submit(
           new ChunkDownloadTask(chunk, httpClient, this, linkDownloadService));
       totalChunksInMemory++;
@@ -134,7 +117,8 @@ public class RemoteChunkProvider extends AbstractRemoteChunkProvider<ArrowResult
         .withRowOffset(link.getRowOffset())
         .withChunkIndex(link.getChunkIndex())
         .withChunkLink(link)
-        .withExpiryTime(Instant.parse(link.getExpiration()))
+        .withNumRows(link.getRowCount())
+        .withExpiryTime(link.parseExpiration())
         .build();
   }
 

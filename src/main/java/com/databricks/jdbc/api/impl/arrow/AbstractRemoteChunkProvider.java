@@ -11,7 +11,6 @@ import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
-import com.databricks.jdbc.model.client.thrift.generated.TRowSet;
 import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
 import com.databricks.jdbc.model.core.ExternalLink;
 import com.databricks.jdbc.model.core.ResultData;
@@ -19,6 +18,9 @@ import com.databricks.jdbc.model.core.ResultManifest;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.jdbc.telemetry.latency.TelemetryCollector;
 import com.databricks.sdk.service.sql.BaseChunkInfo;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -43,6 +45,8 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
   protected final StatementId statementId;
   protected final IDatabricksHttpClient httpClient;
   protected final CompressionCodec compressionCodec;
+
+  // TODO row count is unknown in Thrift case.
   protected long rowCount;
   protected long currentChunkIndex;
   protected long nextChunkToDownload;
@@ -55,6 +59,8 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
 
   protected final ChunkLinkDownloadService<T> linkDownloadService;
   protected final int chunkReadyTimeoutSeconds;
+
+  protected final ConcurrentMap<Long, T> chunkIndexToChunksMap = new ConcurrentHashMap<>();
 
   protected AbstractRemoteChunkProvider(
       StatementId statementId,
@@ -75,12 +81,10 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
     Long totalChunkCount = resultManifest.getTotalChunkCount();
     this.rowCount = resultManifest.getTotalRowCount();
 
-    ConcurrentMap<Long, T> chunkIndexToChunksMap =
-        initializeChunksMap(resultManifest, resultData, statementId);
+    List<ExternalLink> chunkLinks = getChunkLinks(resultManifest, resultData);
 
     this.linkDownloadService =
-        new ChunkLinkDownloadService<>(
-            session, statementId, totalChunkCount, chunkIndexToChunksMap);
+        new ChunkLinkDownloadService<>(session, statementId, totalChunkCount, chunkLinks);
     TelemetryCollector.getInstance().recordTotalChunks(statementId, totalChunkCount);
     initializeData();
   }
@@ -100,24 +104,10 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
     this.statementId = parentStatement.getStatementId();
     this.compressionCodec = compressionCodec;
 
-    ConcurrentMap<Long, T> chunkIndexToChunksMap =
-        initializeChunksMap(resultsResp, parentStatement, session);
-    this.linkDownloadService =
-        new ChunkLinkDownloadService<>(session, statementId, -1, chunkIndexToChunksMap);
+    List<ExternalLink> chunkLinks = getChunkLinks(resultsResp);
+    this.linkDownloadService = new ChunkLinkDownloadService<>(session, statementId, chunkLinks);
     initializeData();
   }
-
-  /** Creates chunk {@link T} based on the {@link BaseChunkInfo}. Used in SQL Execution API flow. */
-  protected abstract T createChunk(
-      StatementId statementId, long chunkIndex, BaseChunkInfo chunkInfo)
-      throws DatabricksSQLException;
-
-  /**
-   * Creates chunk {@link T} based on the {@link TSparkArrowResultLink}. Used in Thrift CLI flow.
-   */
-  protected abstract T createChunk(
-      StatementId statementId, long chunkIndex, TSparkArrowResultLink resultLink)
-      throws DatabricksSQLException;
 
   /** {@inheritDoc} */
   @Override
@@ -128,7 +118,9 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
   /** {@inheritDoc} */
   @Override
   public boolean hasNextChunk() {
-    return currentChunkIndex < chunkCount - 1;
+    // FIXME this logic.
+    return !linkDownloadService.isTotalChunksDiscovered()
+        || (currentChunkIndex < linkDownloadService.getTotalChunks() - 1);
   }
 
   @Override
@@ -138,7 +130,8 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
 
   @Override
   public long getChunkCount() {
-    return chunkCount;
+    // FIXME returns UNKNOWN when still not discovered.
+    return linkDownloadService.getTotalChunks();
   }
 
   /**
@@ -228,64 +221,35 @@ public abstract class AbstractRemoteChunkProvider<T extends AbstractArrowResultC
     // We don't have any chunk in downloaded yet
     totalChunksInMemory = 0L;
     // Number of worker threads are directly linked to allowed chunks in memory
-    allowedChunksInMemory = Math.min(maxParallelChunkDownloadsPerQuery, chunkCount);
+    allowedChunksInMemory = maxParallelChunkDownloadsPerQuery;
     // The first link is available
     downloadNextChunks();
   }
 
-  private ConcurrentMap<Long, T> initializeChunksMap(
-      ResultManifest resultManifest, ResultData resultData, StatementId statementId)
-      throws DatabricksSQLException {
-    ConcurrentMap<Long, T> chunkIndexMap = new ConcurrentHashMap<>();
+  private List<ExternalLink> getChunkLinks(ResultManifest resultManifest, ResultData resultData) {
     if (resultManifest.getTotalChunkCount() == 0) {
-      return chunkIndexMap;
+      return Collections.emptyList();
     }
 
     // TODO check if all the data is required.
-    for (BaseChunkInfo chunkInfo : resultManifest.getChunks()) {
-      LOGGER.debug("Manifest chunk information: " + chunkInfo.toString());
-      chunkIndexMap.put(
-          chunkInfo.getChunkIndex(),
-          createChunk(statementId, chunkInfo.getChunkIndex(), chunkInfo));
-    }
-
-    for (ExternalLink externalLink : resultData.getExternalLinks()) {
-      chunkIndexMap.get(externalLink.getChunkIndex()).setChunkLink(externalLink);
-    }
-
-    return chunkIndexMap;
+    return new ArrayList<>(resultData.getExternalLinks());
   }
 
-  private ConcurrentMap<Long, T> initializeChunksMap(
-      TFetchResultsResp resultsResp,
-      IDatabricksStatementInternal parentStatement,
-      IDatabricksSession session)
-      throws DatabricksSQLException {
-    ConcurrentMap<Long, T> chunkIndexMap = new ConcurrentHashMap<>();
-    populateChunkIndexMap(resultsResp.getResults(), chunkIndexMap);
+  private List<ExternalLink> getChunkLinks(TFetchResultsResp resultsResp) {
+    ArrayList<ExternalLink> chunkLinks = new ArrayList<>();
+
+    List<TSparkArrowResultLink> resultLinks = resultsResp.getResults().getResultLinks();
+    for (int i = 0; i < resultLinks.size(); i++) {
+      TSparkArrowResultLink resultLink = resultLinks.get(i);
+      boolean isLastChunk = !resultsResp.isHasMoreRows() && i == resultLinks.size() - 1;
+      ExternalLink link = DatabricksThriftUtil.createExternalLink(resultLink, i, isLastChunk);
+      chunkLinks.add(link);
+    }
 
     // TODO - move this to ChunkLinkDownloadService.
-    TelemetryCollector.getInstance().recordTotalChunks(statementId, chunkCount);
-    return chunkIndexMap;
-  }
+    // TelemetryCollector.getInstance().recordTotalChunks(statementId, chunkCount);
 
-  /**
-   * Populates the chunk index map with the chunk information from the result data (fetch-request).
-   *
-   * @param resultData The result data containing the chunk information.
-   * @param chunkIndexMap The map to populate with chunk indices and their corresponding chunks.
-   * @throws DatabricksSQLException if there is an error in processing the result data.
-   */
-  private void populateChunkIndexMap(TRowSet resultData, ConcurrentMap<Long, T> chunkIndexMap)
-      throws DatabricksSQLException {
-    rowCount += DatabricksThriftUtil.getRowCount(resultData);
-    for (TSparkArrowResultLink resultLink : resultData.getResultLinks()) {
-      LOGGER.debug(
-          "Chunk information log - Row Offset: %s, Row Count: %s, Expiry Time: %s",
-          resultLink.getStartRowOffset(), resultLink.getRowCount(), resultLink.getExpiryTime());
-      chunkIndexMap.put(chunkCount, createChunk(statementId, chunkCount, resultLink));
-      chunkCount++;
-    }
+    return chunkLinks;
   }
 
   /** Release the memory for previous chunk since it is already consumed */

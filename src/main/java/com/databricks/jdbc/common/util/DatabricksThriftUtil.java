@@ -69,10 +69,15 @@ public class DatabricksThriftUtil {
     }
   }
 
-  public static ExternalLink createExternalLink(TSparkArrowResultLink chunkInfo, long chunkIndex) {
+  public static ExternalLink createExternalLink(
+      TSparkArrowResultLink chunkInfo, long chunkIndex, boolean isLastChunk) {
     return new ExternalLink()
         .setExternalLink(chunkInfo.getFileLink())
+        .setRowOffset(chunkInfo.getStartRowOffset())
         .setChunkIndex(chunkIndex)
+        .setByteCount(chunkInfo.getBytesNum())
+        .setRowCount(chunkInfo.getRowCount())
+        .setIsLastChunk(isLastChunk)
         .setExpiration(Long.toString(chunkInfo.getExpiryTime()));
   }
 

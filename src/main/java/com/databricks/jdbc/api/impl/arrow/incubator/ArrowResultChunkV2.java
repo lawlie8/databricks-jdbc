@@ -296,7 +296,9 @@ public class ArrowResultChunkV2 extends AbstractArrowResultChunk {
       this.rowOffset = chunkInfo.getStartRowOffset();
       this.expiryTime = Instant.ofEpochMilli(chunkInfo.getExpiryTime());
       this.status = ChunkStatus.URL_FETCHED; // URL has always been fetched in case of thrift
-      this.chunkLink = createExternalLink(chunkInfo, chunkIndex);
+
+      // FIXME whether it is last chunk.
+      this.chunkLink = createExternalLink(chunkInfo, chunkIndex, false);
       return this;
     }
 

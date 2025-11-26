@@ -190,21 +190,13 @@ public class ArrowResultChunk extends AbstractArrowResultChunk {
       return this;
     }
 
-    public Builder withThriftChunkInfo(long chunkIndex, TSparkArrowResultLink chunkInfo) {
-      this.chunkIndex = chunkIndex;
-      this.numRows = chunkInfo.getRowCount();
-      this.rowOffset = chunkInfo.getStartRowOffset();
-      this.expiryTime = Instant.ofEpochMilli(chunkInfo.getExpiryTime());
-      this.status =
-          status == null
-              ? ChunkStatus.URL_FETCHED
-              : status; // URL has always been fetched in case of thrift
-      this.chunkLink = createExternalLink(chunkInfo, chunkIndex);
+    public Builder withChunkStatus(ChunkStatus status) {
+      this.status = status;
       return this;
     }
 
-    public Builder withChunkStatus(ChunkStatus status) {
-      this.status = status;
+    public Builder withNumRows(long numRows) {
+      this.numRows = numRows;
       return this;
     }
 
@@ -236,7 +228,5 @@ public class ArrowResultChunk extends AbstractArrowResultChunk {
     public ArrowResultChunk build() throws DatabricksParsingException {
       return new ArrowResultChunk(this);
     }
-
-
   }
 }

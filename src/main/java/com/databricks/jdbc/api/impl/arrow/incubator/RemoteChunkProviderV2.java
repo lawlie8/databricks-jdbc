@@ -12,9 +12,7 @@ import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
 import com.databricks.jdbc.model.core.ExternalLink;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
-import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.sdk.service.sql.BaseChunkInfo;
-import java.util.concurrent.ExecutionException;
 
 /**
  * A V2 implementation of chunk provider that handles chunk downloads using Apache's async HTTP
@@ -63,24 +61,6 @@ public class RemoteChunkProviderV2 extends AbstractRemoteChunkProvider<ArrowResu
         session.getConnectionContext().getCloudFetchSpeedThreshold();
   }
 
-  @Override
-  protected ArrowResultChunkV2 createChunk(
-      StatementId statementId, long chunkIndex, BaseChunkInfo chunkInfo) {
-    return ArrowResultChunkV2.builder()
-        .withStatementId(statementId)
-        .withChunkInfo(chunkInfo)
-        .build();
-  }
-
-  @Override
-  protected ArrowResultChunkV2 createChunk(
-      StatementId statementId, long chunkIndex, TSparkArrowResultLink resultLink) {
-    return ArrowResultChunkV2.builder()
-        .withStatementId(statementId)
-        .withThriftChunkInfo(chunkIndex, resultLink)
-        .build();
-  }
-
   /**
    * {@inheritDoc}
    *
@@ -111,27 +91,28 @@ public class RemoteChunkProviderV2 extends AbstractRemoteChunkProvider<ArrowResu
   @Override
   public void downloadNextChunks() throws DatabricksSQLException {
     while (!isClosed
-        && nextChunkToDownload < chunkCount
+        && linkDownloadService.hasNextLink()
         && totalChunksInMemory < allowedChunksInMemory) {
       ArrowResultChunkV2 chunk = chunkIndexToChunksMap.get(nextChunkToDownload);
       totalChunksInMemory++;
       if (chunk.isChunkLinkInvalid()) {
-        try {
-          ExternalLink link =
-              linkDownloadService
-                  .getLinkForChunk(chunk.getChunkIndex())
-                  .get(); // Block until link is available
-          chunk.setChunkLink(link);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt(); // Restore interrupted status
-          throw new DatabricksSQLException(
-              "Chunk link download interrupted",
-              e,
-              DatabricksDriverErrorCode.THREAD_INTERRUPTED_ERROR);
-        } catch (ExecutionException e) {
-          throw new DatabricksSQLException(
-              "Chunk link download failed", e, DatabricksDriverErrorCode.CHUNK_DOWNLOAD_ERROR);
-        }
+        //        try {
+        ExternalLink link = linkDownloadService.nextChunkLink(); // Block until link is available
+        chunk.setChunkLink(link);
+
+        // TODO What to do about these catch statements
+        //
+        //        } catch (InterruptedException e) {
+        //          Thread.currentThread().interrupt(); // Restore interrupted status
+        //          throw new DatabricksSQLException(
+        //              "Chunk link download interrupted",
+        //              e,
+        //              DatabricksDriverErrorCode.THREAD_INTERRUPTED_ERROR);
+        //        } catch (ExecutionException e) {
+        //          throw new DatabricksSQLException(
+        //              "Chunk link download failed", e,
+        // DatabricksDriverErrorCode.CHUNK_DOWNLOAD_ERROR);
+        //        }
       }
       chunk.downloadData(httpClient, getCompressionCodec(), downloadSpeedThresholdForWaring);
       nextChunkToDownload++;
