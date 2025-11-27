@@ -28,8 +28,8 @@ import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.client.thrift.generated.*;
+import com.databricks.jdbc.model.core.ChunkLinkFetchResult;
 import com.databricks.jdbc.model.core.ExternalLink;
-import com.databricks.jdbc.model.core.GetChunksResult;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.sdk.core.DatabricksConfig;
@@ -300,8 +300,8 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
   }
 
   @Override
-  public GetChunksResult getResultChunks(StatementId statementId, long chunkIndex, long rowOffset)
-      throws DatabricksSQLException {
+  public ChunkLinkFetchResult getResultChunks(
+      StatementId statementId, long chunkIndex, long rowOffset) throws DatabricksSQLException {
     // Thrift uses rowOffset with FETCH_ABSOLUTE; chunkIndex is used for link metadata
     LOGGER.debug(
         "getResultChunks(statementId={}, chunkIndex={}, rowOffset={}) using Thrift client",
@@ -320,13 +320,14 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
       LOGGER.debug(
           "No result links returned for statement {}, hasMoreRows={}", statementId, hasMoreRows);
       // For Thrift, hasMoreRows is the source of truth. Even with no links,
-      // if hasMoreRows is true, we should retry with the same offset.
-      return GetChunksResult.forThrift(Collections.emptyList(), hasMoreRows, rowOffset);
+      // if hasMoreRows is true, we should indicate continuation with the same offset.
+      return ChunkLinkFetchResult.of(new ArrayList<>(), hasMoreRows, chunkIndex, rowOffset);
     }
 
-    List<ExternalLink> externalLinks = new ArrayList<>();
+    List<ChunkLinkFetchResult.ChunkLinkInfo> chunkLinks = new ArrayList<>();
     int lastIndex = resultLinks.size() - 1;
-    long nextRowOffset = rowOffset; // Will be updated based on links
+    long nextRowOffset = rowOffset;
+    long nextFetchIndex = chunkIndex;
 
     for (int i = 0; i < resultLinks.size(); i++) {
       TSparkArrowResultLink thriftLink = resultLinks.get(i);
@@ -336,30 +337,33 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
 
       // Set nextChunkIndex based on position and hasMoreRows
       if (i == lastIndex) {
-        // For the last link, only set nextChunkIndex if there are more rows
         if (hasMoreRows) {
           externalLink.setNextChunkIndex(linkChunkIndex + 1);
+          nextFetchIndex = linkChunkIndex + 1;
         }
-        // If hasMoreRows is false, nextChunkIndex remains null (end of stream)
-
-        // Calculate nextRowOffset from last link
         nextRowOffset = thriftLink.getStartRowOffset() + thriftLink.getRowCount();
       } else {
-        // Not the last link - next chunk follows immediately
         externalLink.setNextChunkIndex(linkChunkIndex + 1);
       }
 
-      externalLinks.add(externalLink);
+      chunkLinks.add(
+          new ChunkLinkFetchResult.ChunkLinkInfo(
+              linkChunkIndex,
+              externalLink,
+              thriftLink.getRowCount(),
+              thriftLink.getStartRowOffset()));
     }
 
     LOGGER.debug(
-        "Fetched {} links for statement {}, hasMoreRows={}, nextRowOffset={}",
-        externalLinks.size(),
+        "Built ChunkLinkFetchResult with {} links for statement {}, hasMore={}, nextFetchIndex={}, nextRowOffset={}",
+        chunkLinks.size(),
         statementId,
         hasMoreRows,
+        nextFetchIndex,
         nextRowOffset);
 
-    return GetChunksResult.forThrift(externalLinks, hasMoreRows, nextRowOffset);
+    return ChunkLinkFetchResult.of(
+        chunkLinks, hasMoreRows, hasMoreRows ? nextFetchIndex : -1, nextRowOffset);
   }
 
   @Override

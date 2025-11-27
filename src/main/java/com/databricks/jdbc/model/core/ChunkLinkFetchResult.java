@@ -1,13 +1,18 @@
-package com.databricks.jdbc.api.impl.arrow;
+package com.databricks.jdbc.model.core;
 
-import com.databricks.jdbc.model.core.ExternalLink;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Result of a chunk link fetch operation from {@link ChunkLinkFetcher}.
+ * Result of fetching chunk links from the server.
  *
- * <p>Contains the fetched chunk links and information about whether more chunks are available.
+ * <p>Contains the fetched chunk links and continuation information for both SEA and Thrift
+ * protocols:
+ *
+ * <ul>
+ *   <li>SEA: Uses chunkIndex for continuation, hasMore derived from nextChunkIndex on last link
+ *   <li>Thrift: Uses rowOffset for continuation, hasMore from server's hasMoreRows flag
+ * </ul>
  */
 public class ChunkLinkFetchResult {
 
@@ -25,20 +30,7 @@ public class ChunkLinkFetchResult {
   }
 
   /**
-   * Creates a result with the given links and continuation info (for SEA).
-   *
-   * @param links The fetched chunk links
-   * @param hasMore Whether more chunks are available
-   * @param nextFetchIndex The next chunk index to fetch from, or -1 if no more
-   * @return A new ChunkLinkFetchResult
-   */
-  public static ChunkLinkFetchResult of(
-      List<ChunkLinkInfo> links, boolean hasMore, long nextFetchIndex) {
-    return new ChunkLinkFetchResult(links, hasMore, nextFetchIndex, 0);
-  }
-
-  /**
-   * Creates a result with full continuation info (for Thrift).
+   * Creates a result with the given links and continuation info.
    *
    * @param links The fetched chunk links
    * @param hasMore Whether more chunks are available

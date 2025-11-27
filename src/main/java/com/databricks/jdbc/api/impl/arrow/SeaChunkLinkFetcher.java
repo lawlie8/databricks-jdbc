@@ -5,12 +5,9 @@ import com.databricks.jdbc.dbclient.impl.common.StatementId;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
+import com.databricks.jdbc.model.core.ChunkLinkFetchResult;
 import com.databricks.jdbc.model.core.ExternalLink;
-import com.databricks.jdbc.model.core.GetChunksResult;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 
 /**
  * ChunkLinkFetcher implementation for the SQL Execution API (SEA) client.
@@ -40,40 +37,9 @@ public class SeaChunkLinkFetcher implements ChunkLinkFetcher {
         startChunkIndex,
         statementId);
 
-    GetChunksResult result =
-        session.getDatabricksClient().getResultChunks(statementId, startChunkIndex, startRowOffset);
-    Collection<ExternalLink> links = result.getExternalLinks();
-
-    if (links == null || links.isEmpty()) {
-      LOGGER.debug("No links returned, end of stream reached for statement {}", statementId);
-      return ChunkLinkFetchResult.endOfStream();
-    }
-
-    List<ChunkLinkFetchResult.ChunkLinkInfo> chunkLinks = new ArrayList<>();
-    Long nextIndex = null;
-
-    for (ExternalLink link : links) {
-      chunkLinks.add(
-          new ChunkLinkFetchResult.ChunkLinkInfo(
-              link.getChunkIndex(), link, link.getRowCount(), link.getRowOffset()));
-
-      // Track last link's nextChunkIndex for logging
-      nextIndex = link.getNextChunkIndex();
-    }
-
-    // Use hasMoreData and nextRowOffset from GetChunksResult (unified with Thrift)
-    boolean hasMore = result.hasMoreData();
-    long nextRowOffset = result.getNextRowOffset();
-
-    LOGGER.debug(
-        "Fetched {} links for statement {}, hasMore={}, nextIndex={}, nextRowOffset={}",
-        chunkLinks.size(),
-        statementId,
-        hasMore,
-        nextIndex,
-        nextRowOffset);
-
-    return ChunkLinkFetchResult.of(chunkLinks, hasMore, hasMore ? nextIndex : -1, nextRowOffset);
+    return session
+        .getDatabricksClient()
+        .getResultChunks(statementId, startChunkIndex, startRowOffset);
   }
 
   @Override
@@ -81,22 +47,21 @@ public class SeaChunkLinkFetcher implements ChunkLinkFetcher {
     // SEA uses chunkIndex; rowOffset is ignored
     LOGGER.info("Refetching expired link for chunk {} of statement {}", chunkIndex, statementId);
 
-    GetChunksResult result =
+    ChunkLinkFetchResult result =
         session.getDatabricksClient().getResultChunks(statementId, chunkIndex, rowOffset);
-    Collection<ExternalLink> links = result.getExternalLinks();
 
-    if (links == null || links.isEmpty()) {
+    if (result.isEndOfStream()) {
       throw new DatabricksSQLException(
           String.format("Failed to refetch link for chunk %d: no links returned", chunkIndex),
           DatabricksDriverErrorCode.CHUNK_READY_ERROR);
     }
 
     // Find the link for the requested chunk index
-    for (ExternalLink link : links) {
-      if (link.getChunkIndex() != null && link.getChunkIndex() == chunkIndex) {
+    for (ChunkLinkFetchResult.ChunkLinkInfo linkInfo : result.getChunkLinks()) {
+      if (linkInfo.getChunkIndex() == chunkIndex) {
         LOGGER.debug(
             "Successfully refetched link for chunk {} of statement {}", chunkIndex, statementId);
-        return link;
+        return linkInfo.getLink();
       }
     }
 

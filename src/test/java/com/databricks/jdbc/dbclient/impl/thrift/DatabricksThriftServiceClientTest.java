@@ -24,7 +24,7 @@ import com.databricks.jdbc.dbclient.impl.common.StatementId;
 import com.databricks.jdbc.exception.DatabricksParsingException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.model.client.thrift.generated.*;
-import com.databricks.jdbc.model.core.ExternalLink;
+import com.databricks.jdbc.model.core.ChunkLinkFetchResult;
 import com.databricks.jdbc.model.core.ResultColumn;
 import com.databricks.sdk.core.DatabricksConfig;
 import com.databricks.sdk.service.sql.StatementState;
@@ -376,10 +376,10 @@ public class DatabricksThriftServiceClientTest {
         .thenReturn(
             Collections.singletonList(new TSparkArrowResultLink().setFileLink(TEST_STRING)));
     // Pass chunkIndex=0 and rowOffset=0 for the first chunk
-    Collection<ExternalLink> resultChunks =
-        client.getResultChunks(TEST_STMT_ID, 0, 0).getExternalLinks();
-    assertEquals(resultChunks.size(), 1);
-    assertEquals(resultChunks.stream().findFirst().get().getExternalLink(), TEST_STRING);
+    ChunkLinkFetchResult result = client.getResultChunks(TEST_STMT_ID, 0, 0);
+    List<ChunkLinkFetchResult.ChunkLinkInfo> chunkLinks = result.getChunkLinks();
+    assertEquals(1, chunkLinks.size());
+    assertEquals(TEST_STRING, chunkLinks.get(0).getLink().getExternalLink());
   }
 
   @Test
@@ -394,9 +394,9 @@ public class DatabricksThriftServiceClientTest {
     when(thriftAccessor.fetchResultsWithAbsoluteOffset(any(), anyLong(), any()))
         .thenReturn(response);
     when(resultData.getResultLinks()).thenReturn(null);
-    Collection<ExternalLink> resultChunks =
-        client.getResultChunks(TEST_STMT_ID, 0, 0).getExternalLinks();
-    assertEquals(0, resultChunks.size());
+    ChunkLinkFetchResult result = client.getResultChunks(TEST_STMT_ID, 0, 0);
+    assertTrue(result.isEndOfStream());
+    assertEquals(0, result.getChunkLinks().size());
   }
 
   @Test

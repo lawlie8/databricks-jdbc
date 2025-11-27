@@ -20,10 +20,10 @@ import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
 import com.databricks.jdbc.model.client.thrift.generated.TGetResultSetMetadataResp;
 import com.databricks.jdbc.model.client.thrift.generated.TRowSet;
 import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
+import com.databricks.jdbc.model.core.ChunkLinkFetchResult;
 import com.databricks.jdbc.model.core.ColumnInfo;
 import com.databricks.jdbc.model.core.ColumnInfoTypeName;
 import com.databricks.jdbc.model.core.ExternalLink;
-import com.databricks.jdbc.model.core.GetChunksResult;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
 import com.databricks.jdbc.model.core.ResultSchema;
@@ -284,8 +284,34 @@ public class ArrowStreamResultTest {
     for (int chunkIndex = 1; chunkIndex < numberOfChunks; chunkIndex++) {
       boolean isLastChunk = (chunkIndex == (numberOfChunks - 1));
       when(mockedSdkClient.getResultChunks(eq(STATEMENT_ID), eq((long) chunkIndex), anyLong()))
-          .thenReturn(GetChunksResult.forSea(getChunkLinks(chunkIndex, isLastChunk)));
+          .thenReturn(buildChunkLinkFetchResult(getChunkLinks(chunkIndex, isLastChunk)));
     }
+  }
+
+  private ChunkLinkFetchResult buildChunkLinkFetchResult(List<ExternalLink> links) {
+    if (links == null || links.isEmpty()) {
+      return ChunkLinkFetchResult.endOfStream();
+    }
+
+    List<ChunkLinkFetchResult.ChunkLinkInfo> chunkLinks = new ArrayList<>();
+    for (ExternalLink link : links) {
+      chunkLinks.add(
+          new ChunkLinkFetchResult.ChunkLinkInfo(
+              link.getChunkIndex(),
+              link,
+              link.getRowCount() != null ? link.getRowCount() : 0,
+              link.getRowOffset() != null ? link.getRowOffset() : 0));
+    }
+
+    ExternalLink lastLink = links.get(links.size() - 1);
+    boolean hasMore = lastLink.getNextChunkIndex() != null;
+    long nextFetchIndex = hasMore ? lastLink.getNextChunkIndex() : -1;
+    long nextRowOffset = 0;
+    if (lastLink.getRowOffset() != null && lastLink.getRowCount() != null) {
+      nextRowOffset = lastLink.getRowOffset() + lastLink.getRowCount();
+    }
+
+    return ChunkLinkFetchResult.of(chunkLinks, hasMore, nextFetchIndex, nextRowOffset);
   }
 
   private File createTestArrowFile(

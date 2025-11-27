@@ -1,6 +1,7 @@
 package com.databricks.jdbc.api.impl.arrow;
 
 import com.databricks.jdbc.exception.DatabricksSQLException;
+import com.databricks.jdbc.model.core.ChunkLinkFetchResult;
 import com.databricks.jdbc.model.core.ExternalLink;
 
 /**

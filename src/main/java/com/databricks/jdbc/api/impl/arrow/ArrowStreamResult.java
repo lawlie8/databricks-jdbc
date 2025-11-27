@@ -19,6 +19,7 @@ import com.databricks.jdbc.model.client.thrift.generated.TColumnDesc;
 import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
 import com.databricks.jdbc.model.client.thrift.generated.TGetResultSetMetadataResp;
 import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
+import com.databricks.jdbc.model.core.ChunkLinkFetchResult;
 import com.databricks.jdbc.model.core.ColumnInfo;
 import com.databricks.jdbc.model.core.ColumnInfoTypeName;
 import com.databricks.jdbc.model.core.ExternalLink;
