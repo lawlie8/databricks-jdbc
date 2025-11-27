@@ -3,12 +3,11 @@ package com.databricks.jdbc.api.impl.arrow;
 import com.databricks.jdbc.common.CompressionCodec;
 import com.databricks.jdbc.dbclient.IDatabricksHttpClient;
 import com.databricks.jdbc.dbclient.impl.common.StatementId;
+import com.databricks.jdbc.exception.DatabricksParsingException;
 import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
-
-import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -21,27 +20,31 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.annotation.Nonnull;
 
 /**
  * A streaming chunk provider that fetches chunk links proactively and downloads chunks in parallel.
  *
  * <p>Key features:
+ *
  * <ul>
- *   <li>No dependency on total chunk count - streams until end of data</li>
- *   <li>Proactive link prefetching with configurable window</li>
- *   <li>Memory-bounded parallel downloads</li>
- *   <li>Automatic link refresh on expiration</li>
+ *   <li>No dependency on total chunk count - streams until end of data
+ *   <li>Proactive link prefetching with configurable window
+ *   <li>Memory-bounded parallel downloads
+ *   <li>Automatic link refresh on expiration
  * </ul>
  *
  * <p>This provider uses two key windows:
+ *
  * <ul>
- *   <li>Link prefetch window: How many links to fetch ahead of consumption</li>
- *   <li>Download window: How many chunks to keep in memory (downloading or ready)</li>
+ *   <li>Link prefetch window: How many links to fetch ahead of consumption
+ *   <li>Download window: How many chunks to keep in memory (downloading or ready)
  * </ul>
  */
 public class StreamingChunkProvider implements ChunkProvider {
 
-  private static final JdbcLogger LOGGER = JdbcLoggerFactory.getLogger(StreamingChunkProvider.class);
+  private static final JdbcLogger LOGGER =
+      JdbcLoggerFactory.getLogger(StreamingChunkProvider.class);
   private static final String DOWNLOAD_THREAD_PREFIX = "databricks-jdbc-streaming-downloader-";
   private static final String PREFETCH_THREAD_NAME = "databricks-jdbc-link-prefetcher";
 
@@ -76,10 +79,10 @@ public class StreamingChunkProvider implements ChunkProvider {
   // Synchronization for prefetch thread
   private final ReentrantLock prefetchLock = new ReentrantLock();
   private final Condition consumerAdvanced = prefetchLock.newCondition();
+  private final Condition chunkCreated = prefetchLock.newCondition();
 
   // Synchronization for download coordination
   private final ReentrantLock downloadLock = new ReentrantLock();
-  private final Condition downloadSlotAvailable = downloadLock.newCondition();
 
   // Executors
   private final ExecutorService downloadExecutor;
@@ -110,7 +113,8 @@ public class StreamingChunkProvider implements ChunkProvider {
       int linkPrefetchWindow,
       int chunkReadyTimeoutSeconds,
       double cloudFetchSpeedThreshold,
-      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks) {
+      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks)
+      throws DatabricksParsingException {
 
     this.linkFetcher = linkFetcher;
     this.httpClient = httpClient;
@@ -143,9 +147,7 @@ public class StreamingChunkProvider implements ChunkProvider {
     notifyConsumerAdvanced();
   }
 
-  /**
-   * Convenience constructor with default prefetch window.
-   */
+  /** Convenience constructor with default prefetch window. */
   public StreamingChunkProvider(
       ChunkLinkFetcher linkFetcher,
       IDatabricksHttpClient httpClient,
@@ -154,7 +156,8 @@ public class StreamingChunkProvider implements ChunkProvider {
       int maxChunksInMemory,
       int chunkReadyTimeoutSeconds,
       double cloudFetchSpeedThreshold,
-      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks) {
+      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks)
+      throws DatabricksParsingException {
     this(
         linkFetcher,
         httpClient,
@@ -204,9 +207,6 @@ public class StreamingChunkProvider implements ChunkProvider {
     // Notify prefetch thread that consumer advanced
     notifyConsumerAdvanced();
 
-    // Trigger downloads for newly available slots
-    triggerDownloads();
-
     return true;
   }
 
@@ -227,7 +227,8 @@ public class StreamingChunkProvider implements ChunkProvider {
 
     if (chunk == null) {
       throw new DatabricksSQLException(
-          "Chunk " + currentChunkIndex + " not found after waiting", DatabricksDriverErrorCode.CHUNK_READY_ERROR);
+          "Chunk " + currentChunkIndex + " not found after waiting",
+          DatabricksDriverErrorCode.CHUNK_READY_ERROR);
     }
 
     // Wait for chunk to be ready (downloaded and processed)
@@ -236,13 +237,22 @@ public class StreamingChunkProvider implements ChunkProvider {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new DatabricksSQLException(
-          "Interrupted waiting for chunk " + currentChunkIndex, e, DatabricksDriverErrorCode.THREAD_INTERRUPTED_ERROR);
+          "Interrupted waiting for chunk " + currentChunkIndex,
+          e,
+          DatabricksDriverErrorCode.THREAD_INTERRUPTED_ERROR);
     } catch (ExecutionException e) {
       throw new DatabricksSQLException(
-          "Failed to prepare chunk " + currentChunkIndex, e.getCause(), DatabricksDriverErrorCode.CHUNK_READY_ERROR);
+          "Failed to prepare chunk " + currentChunkIndex,
+          e.getCause(),
+          DatabricksDriverErrorCode.CHUNK_READY_ERROR);
     } catch (TimeoutException e) {
       throw new DatabricksSQLException(
-          "Timeout waiting for chunk " + currentChunkIndex + " (timeout: " + chunkReadyTimeoutSeconds + "s)", DatabricksDriverErrorCode.CHUNK_READY_ERROR);
+          "Timeout waiting for chunk "
+              + currentChunkIndex
+              + " (timeout: "
+              + chunkReadyTimeoutSeconds
+              + "s)",
+          DatabricksDriverErrorCode.CHUNK_READY_ERROR);
     }
 
     return chunk;
@@ -257,9 +267,9 @@ public class StreamingChunkProvider implements ChunkProvider {
     LOGGER.info("Closing StreamingChunkProvider for statement {}", statementId);
     closed = true;
 
-    // Wake up any waiting threads
+    // Wake up any waiting threads so they can exit
     notifyConsumerAdvanced();
-    notifyDownloadSlotAvailable();
+    notifyChunkCreated();
 
     // Interrupt prefetch thread
     if (linkPrefetchThread != null) {
@@ -320,8 +330,10 @@ public class StreamingChunkProvider implements ChunkProvider {
 
           // Wait if we're caught up
           while (!closed && !endOfStreamReached && nextLinkFetchIndex > targetIndex) {
-            LOGGER.debug("Prefetch caught up, waiting for consumer. next={}, target={}",
-                nextLinkFetchIndex, targetIndex);
+            LOGGER.debug(
+                "Prefetch caught up, waiting for consumer. next={}, target={}",
+                nextLinkFetchIndex,
+                targetIndex);
             consumerAdvanced.await();
             targetIndex = currentChunkIndex + linkPrefetchWindow;
           }
@@ -354,8 +366,8 @@ public class StreamingChunkProvider implements ChunkProvider {
       return;
     }
 
-    LOGGER.debug("Fetching links starting from index {} for statement {}",
-        nextLinkFetchIndex, statementId);
+    LOGGER.debug(
+        "Fetching links starting from index {} for statement {}", nextLinkFetchIndex, statementId);
 
     ChunkLinkFetchResult result = linkFetcher.fetchLinks(nextLinkFetchIndex);
 
@@ -383,12 +395,13 @@ public class StreamingChunkProvider implements ChunkProvider {
   }
 
   /**
-   * Processes initial links provided with the result data.
-   * This avoids an extra fetch call for links the server already provided.
+   * Processes initial links provided with the result data. This avoids an extra fetch call for
+   * links the server already provided.
    *
    * @param initialLinks The initial links from ResultData, may be null or empty
    */
-  private void processInitialLinks(Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks) {
+  private void processInitialLinks(Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks)
+      throws DatabricksParsingException {
     if (initialLinks == null || initialLinks.isEmpty()) {
       LOGGER.debug("No initial links provided for statement {}", statementId);
       return;
@@ -421,31 +434,34 @@ public class StreamingChunkProvider implements ChunkProvider {
    *
    * @param linkInfo The chunk link info containing index, row count, offset, and link
    */
-  private void createChunkFromLink(ChunkLinkFetchResult.ChunkLinkInfo linkInfo) {
+  private void createChunkFromLink(ChunkLinkFetchResult.ChunkLinkInfo linkInfo)
+      throws DatabricksParsingException {
     long chunkIndex = linkInfo.getChunkIndex();
     if (chunks.containsKey(chunkIndex)) {
       LOGGER.debug("Chunk {} already exists, skipping creation", chunkIndex);
       return;
     }
 
-    try {
-      ArrowResultChunk chunk = ArrowResultChunk.builder()
-          .withStatementId(statementId)
-          .withChunkMetadata(chunkIndex, linkInfo.getRowCount(), linkInfo.getRowOffset())
-          .withChunkReadyTimeoutSeconds(chunkReadyTimeoutSeconds)
-          .build();
+    ArrowResultChunk chunk =
+        ArrowResultChunk.builder()
+            .withStatementId(statementId)
+            .withChunkMetadata(chunkIndex, linkInfo.getRowCount(), linkInfo.getRowOffset())
+            .withChunkReadyTimeoutSeconds(chunkReadyTimeoutSeconds)
+            .build();
 
-      chunk.setChunkLink(linkInfo.getLink());
-      chunks.put(chunkIndex, chunk);
-      highestKnownChunkIndex = Math.max(highestKnownChunkIndex, chunkIndex);
-      totalRowCount.addAndGet(linkInfo.getRowCount());
+    chunk.setChunkLink(linkInfo.getLink());
+    chunks.put(chunkIndex, chunk);
+    highestKnownChunkIndex = Math.max(highestKnownChunkIndex, chunkIndex);
+    totalRowCount.addAndGet(linkInfo.getRowCount());
 
-      LOGGER.debug("Created chunk {} with {} rows for statement {}",
-          chunkIndex, linkInfo.getRowCount(), statementId);
+    // Notify any waiting consumers that a chunk is available
+    notifyChunkCreated();
 
-    } catch (Exception e) {
-      LOGGER.error("Failed to create chunk {}: {}", chunkIndex, e.getMessage());
-    }
+    LOGGER.debug(
+        "Created chunk {} with {} rows for statement {}",
+        chunkIndex,
+        linkInfo.getRowCount(),
+        statementId);
   }
 
   // ==================== Download Coordination ====================
@@ -453,7 +469,9 @@ public class StreamingChunkProvider implements ChunkProvider {
   private void triggerDownloads() {
     downloadLock.lock();
     try {
-      while (!closed && chunksInMemory.get() < maxChunksInMemory && nextDownloadIndex <= highestKnownChunkIndex) {
+      while (!closed
+          && chunksInMemory.get() < maxChunksInMemory
+          && nextDownloadIndex <= highestKnownChunkIndex) {
         ArrowResultChunk chunk = chunks.get(nextDownloadIndex);
 
         if (chunk == null) {
@@ -478,12 +496,9 @@ public class StreamingChunkProvider implements ChunkProvider {
   private void submitDownloadTask(ArrowResultChunk chunk) {
     LOGGER.debug("Submitting download task for chunk {}", chunk.getChunkIndex());
 
-    StreamingChunkDownloadTask task = new StreamingChunkDownloadTask(
-        chunk,
-        httpClient,
-        compressionCodec,
-        linkFetcher,
-        cloudFetchSpeedThreshold);
+    StreamingChunkDownloadTask task =
+        new StreamingChunkDownloadTask(
+            chunk, httpClient, compressionCodec, linkFetcher, cloudFetchSpeedThreshold);
 
     downloadExecutor.submit(task);
   }
@@ -498,35 +513,45 @@ public class StreamingChunkProvider implements ChunkProvider {
 
       LOGGER.debug("Released chunk {}, chunksInMemory={}", chunkIndex, chunksInMemory.get());
 
-      // Notify download coordinator
-      notifyDownloadSlotAvailable();
-
-      // Trigger more downloads
+      // Trigger more downloads to fill the freed slot
       triggerDownloads();
     }
   }
 
   private void waitForChunkCreation(long chunkIndex) throws DatabricksSQLException {
-    long startTime = System.currentTimeMillis();
-    long timeoutMs = chunkReadyTimeoutSeconds * 1000L;
+    long remainingNanos = 5 * 1_000_000_000L;
 
-    while (!closed && !chunks.containsKey(chunkIndex)) {
-      if (endOfStreamReached && chunkIndex > highestKnownChunkIndex) {
-        throw new DatabricksSQLException(
-            "Chunk " + chunkIndex + " does not exist (highest known: " + highestKnownChunkIndex + ")", DatabricksDriverErrorCode.CHUNK_READY_ERROR);
-      }
+    prefetchLock.lock();
+    try {
+      while (!closed && !chunks.containsKey(chunkIndex)) {
+        if (endOfStreamReached && chunkIndex > highestKnownChunkIndex) {
+          throw new DatabricksSQLException(
+              "Chunk "
+                  + chunkIndex
+                  + " does not exist (highest known: "
+                  + highestKnownChunkIndex
+                  + ")",
+              DatabricksDriverErrorCode.CHUNK_READY_ERROR);
+        }
 
-      if (timeoutMs > 0 && System.currentTimeMillis() - startTime > timeoutMs) {
-        throw new DatabricksSQLException(
-            "Timeout waiting for chunk " + chunkIndex + " to be created", DatabricksDriverErrorCode.CHUNK_READY_ERROR);
-      }
+        if (remainingNanos <= 0) {
+          throw new DatabricksSQLException(
+              "Timeout waiting for chunk " + chunkIndex + " to be created",
+              DatabricksDriverErrorCode.CHUNK_READY_ERROR);
+        }
 
-      try {
-        Thread.sleep(10); // Brief wait before checking again
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new DatabricksSQLException("Interrupted waiting for chunk creation", e, DatabricksDriverErrorCode.THREAD_INTERRUPTED_ERROR);
+        try {
+          remainingNanos = chunkCreated.awaitNanos(remainingNanos);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new DatabricksSQLException(
+              "Interrupted waiting for chunk creation",
+              e,
+              DatabricksDriverErrorCode.THREAD_INTERRUPTED_ERROR);
+        }
       }
+    } finally {
+      prefetchLock.unlock();
     }
   }
 
@@ -541,29 +566,30 @@ public class StreamingChunkProvider implements ChunkProvider {
     }
   }
 
-  private void notifyDownloadSlotAvailable() {
-    downloadLock.lock();
+  private void notifyChunkCreated() {
+    prefetchLock.lock();
     try {
-      downloadSlotAvailable.signalAll();
+      chunkCreated.signalAll();
     } finally {
-      downloadLock.unlock();
+      prefetchLock.unlock();
     }
   }
 
   // ==================== Executor Creation ====================
 
   private ExecutorService createDownloadExecutor(int poolSize) {
-    ThreadFactory threadFactory = new ThreadFactory() {
-      private final AtomicInteger threadCount = new AtomicInteger(1);
+    ThreadFactory threadFactory =
+        new ThreadFactory() {
+          private final AtomicInteger threadCount = new AtomicInteger(1);
 
-      @Override
-      public Thread newThread(@Nonnull Runnable r) {
-        Thread thread = new Thread(r);
-        thread.setName(DOWNLOAD_THREAD_PREFIX + threadCount.getAndIncrement());
-        thread.setDaemon(true);
-        return thread;
-      }
-    };
+          @Override
+          public Thread newThread(@Nonnull Runnable r) {
+            Thread thread = new Thread(r);
+            thread.setName(DOWNLOAD_THREAD_PREFIX + threadCount.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+          }
+        };
 
     return Executors.newFixedThreadPool(poolSize, threadFactory);
   }

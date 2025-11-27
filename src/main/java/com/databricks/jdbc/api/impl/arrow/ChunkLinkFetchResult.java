@@ -15,7 +15,8 @@ public class ChunkLinkFetchResult {
   private final boolean hasMore;
   private final long nextFetchIndex;
 
-  private ChunkLinkFetchResult(List<ChunkLinkInfo> chunkLinks, boolean hasMore, long nextFetchIndex) {
+  private ChunkLinkFetchResult(
+      List<ChunkLinkInfo> chunkLinks, boolean hasMore, long nextFetchIndex) {
     this.chunkLinks = chunkLinks;
     this.hasMore = hasMore;
     this.nextFetchIndex = nextFetchIndex;
@@ -29,7 +30,8 @@ public class ChunkLinkFetchResult {
    * @param nextFetchIndex The next chunk index to fetch from, or -1 if no more
    * @return A new ChunkLinkFetchResult
    */
-  public static ChunkLinkFetchResult of(List<ChunkLinkInfo> links, boolean hasMore, long nextFetchIndex) {
+  public static ChunkLinkFetchResult of(
+      List<ChunkLinkInfo> links, boolean hasMore, long nextFetchIndex) {
     return new ChunkLinkFetchResult(links, hasMore, nextFetchIndex);
   }
 
