@@ -4,6 +4,7 @@ import static com.databricks.jdbc.common.util.DatabricksThriftUtil.getColumnInfo
 
 import com.databricks.jdbc.api.impl.ComplexDataTypeParser;
 import com.databricks.jdbc.api.impl.IExecutionResult;
+import com.databricks.jdbc.api.internal.IDatabricksConnectionContext;
 import com.databricks.jdbc.api.internal.IDatabricksSession;
 import com.databricks.jdbc.api.internal.IDatabricksStatementInternal;
 import com.databricks.jdbc.common.CompressionCodec;
@@ -18,11 +19,14 @@ import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
 import com.databricks.jdbc.model.client.thrift.generated.TGetResultSetMetadataResp;
 import com.databricks.jdbc.model.core.ColumnInfo;
 import com.databricks.jdbc.model.core.ColumnInfoTypeName;
+import com.databricks.jdbc.model.core.ExternalLink;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
 import com.google.common.annotations.VisibleForTesting;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** Result container for Arrow-based query results. */
 public class ArrowStreamResult implements IExecutionResult {
@@ -69,18 +73,67 @@ public class ArrowStreamResult implements IExecutionResult {
           "Creating ArrowStreamResult with remote links for statementId: {}",
           statementId.toSQLExecStatementId());
       this.chunkProvider =
-          new RemoteChunkProvider(
-              statementId,
-              resultManifest,
-              resultData,
-              session,
-              httpClient,
-              session.getConnectionContext().getCloudFetchThreadPoolSize());
+          createRemoteChunkProvider(statementId, resultManifest, resultData, session, httpClient);
     }
     this.columnInfos =
         resultManifest.getSchema().getColumnCount() == 0
             ? new ArrayList<>()
             : new ArrayList<>(resultManifest.getSchema().getColumns());
+  }
+
+  /**
+   * Creates the appropriate remote chunk provider based on configuration.
+   *
+   * @param statementId The statement ID
+   * @param resultManifest The result manifest containing chunk metadata
+   * @param resultData The result data containing initial external links
+   * @param session The session for fetching additional chunks
+   * @param httpClient The HTTP client for downloading chunk data
+   * @return A ChunkProvider instance
+   */
+  private static ChunkProvider createRemoteChunkProvider(
+      StatementId statementId,
+      ResultManifest resultManifest,
+      ResultData resultData,
+      IDatabricksSession session,
+      IDatabricksHttpClient httpClient)
+      throws DatabricksSQLException {
+
+    IDatabricksConnectionContext connectionContext = session.getConnectionContext();
+
+    if (connectionContext.isStreamingChunkProviderEnabled()) {
+      LOGGER.info(
+          "Using StreamingChunkProvider for statementId: {}", statementId.toSQLExecStatementId());
+
+      ChunkLinkFetcher linkFetcher = new SeaChunkLinkFetcher(session, statementId);
+      CompressionCodec compressionCodec = resultManifest.getResultCompression();
+      int maxChunksInMemory = connectionContext.getCloudFetchThreadPoolSize();
+      int chunkReadyTimeoutSeconds = connectionContext.getChunkReadyTimeoutSeconds();
+      double cloudFetchSpeedThreshold = connectionContext.getCloudFetchSpeedThreshold();
+
+      // Convert ExternalLinks to ChunkLinkInfo for the provider
+      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks =
+          convertToChunkLinkInfos(resultData.getExternalLinks());
+
+      return new StreamingChunkProvider(
+          linkFetcher,
+          httpClient,
+          compressionCodec,
+          statementId,
+          maxChunksInMemory,
+          chunkReadyTimeoutSeconds,
+          cloudFetchSpeedThreshold,
+          initialLinks);
+    } else {
+      // Use the original RemoteChunkProvider
+      return new RemoteChunkProvider(
+          statementId,
+          resultManifest,
+          resultData,
+          session,
+          httpClient,
+          connectionContext.getCloudFetchThreadPoolSize());
+    }
   }
 
   public ArrowStreamResult(
@@ -267,5 +320,27 @@ public class ArrowStreamResult implements IExecutionResult {
     for (TColumnDesc tColumnDesc : resultManifest.getSchema().getColumns()) {
       columnInfos.add(getColumnInfoFromTColumnDesc(tColumnDesc));
     }
+  }
+
+  /**
+   * Converts a collection of ExternalLinks to ChunkLinkInfo objects.
+   *
+   * @param externalLinks The external links to convert, may be null
+   * @return A collection of ChunkLinkInfo objects, or null if input is null
+   */
+  private static Collection<ChunkLinkFetchResult.ChunkLinkInfo> convertToChunkLinkInfos(
+      Collection<ExternalLink> externalLinks) {
+    if (externalLinks == null) {
+      return null;
+    }
+    return externalLinks.stream()
+        .map(
+            link ->
+                new ChunkLinkFetchResult.ChunkLinkInfo(
+                    link.getChunkIndex() != null ? link.getChunkIndex() : 0,
+                    link,
+                    link.getRowCount() != null ? link.getRowCount() : 0,
+                    link.getRowOffset() != null ? link.getRowOffset() : 0))
+        .collect(Collectors.toList());
   }
 }

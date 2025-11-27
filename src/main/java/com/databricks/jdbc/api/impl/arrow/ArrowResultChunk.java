@@ -197,6 +197,23 @@ public class ArrowResultChunk extends AbstractArrowResultChunk {
       return this;
     }
 
+    /**
+     * Sets chunk metadata directly without requiring a BaseChunkInfo object. Useful for streaming
+     * chunk creation where metadata comes from ExternalLink.
+     *
+     * @param chunkIndex The index of this chunk
+     * @param rowCount The number of rows in this chunk
+     * @param rowOffset The starting row offset for this chunk
+     * @return this builder
+     */
+    public Builder withChunkMetadata(long chunkIndex, long rowCount, long rowOffset) {
+      this.chunkIndex = chunkIndex;
+      this.numRows = rowCount;
+      this.rowOffset = rowOffset;
+      this.status = status == null ? ChunkStatus.PENDING : status;
+      return this;
+    }
+
     public Builder withInputStream(InputStream stream, long rowCount) {
       this.numRows = rowCount;
       this.inputStream = stream;
