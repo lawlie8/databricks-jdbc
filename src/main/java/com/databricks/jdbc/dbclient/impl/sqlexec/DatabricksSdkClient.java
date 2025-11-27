@@ -30,7 +30,7 @@ import com.databricks.jdbc.model.client.sqlexec.ExecuteStatementResponse;
 import com.databricks.jdbc.model.client.sqlexec.GetStatementResponse;
 import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
 import com.databricks.jdbc.model.core.Disposition;
-import com.databricks.jdbc.model.core.ExternalLink;
+import com.databricks.jdbc.model.core.GetChunksResult;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import com.databricks.sdk.WorkspaceClient;
@@ -409,14 +409,12 @@ public class DatabricksSdkClient implements IDatabricksClient {
   }
 
   @Override
-  public Collection<ExternalLink> getResultChunks(StatementId typedStatementId, long chunkIndex)
-      throws DatabricksSQLException {
-    DatabricksThreadContextHolder.setStatementId(typedStatementId);
+  public GetChunksResult getResultChunks(
+      StatementId typedStatementId, long chunkIndex, long rowOffset) throws DatabricksSQLException {
+    // SEA uses chunkIndex; rowOffset is ignored
     String statementId = typedStatementId.toSQLExecStatementId();
     LOGGER.debug(
-        "public Optional<ExternalLink> getResultChunk(String statementId = {}, long chunkIndex = {})",
-        statementId,
-        chunkIndex);
+        "getResultChunks(statementId={}, chunkIndex={}) using SEA client", statementId, chunkIndex);
     GetStatementResultChunkNRequest request =
         new GetStatementResultChunkNRequest().setStatementId(statementId).setChunkIndex(chunkIndex);
     String path = String.format(RESULT_CHUNK_PATH, statementId, chunkIndex);
@@ -424,7 +422,7 @@ public class DatabricksSdkClient implements IDatabricksClient {
       Request req = new Request(Request.GET, path, apiClient.serialize(request));
       req.withHeaders(getHeaders("getStatementResultN"));
       ResultData resultData = apiClient.execute(req, ResultData.class);
-      return resultData.getExternalLinks();
+      return GetChunksResult.forSea(resultData.getExternalLinks());
     } catch (IOException e) {
       String errorMessage = "Error while processing the get result chunk request";
       LOGGER.error(errorMessage, e);

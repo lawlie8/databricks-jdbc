@@ -158,7 +158,7 @@ public class ArrowResultChunk extends AbstractArrowResultChunk {
       double speedMBps = (contentLength / 1024.0 / 1024.0) / (downloadTimeMs / 1000.0);
       String baseUrl = url.split("\\?")[0];
 
-      LOGGER.info(
+      LOGGER.debug(
           String.format(
               "CloudFetch download: %.4f MB/s, %d bytes in %dms from %s",
               speedMBps, contentLength, downloadTimeMs, baseUrl));

@@ -52,7 +52,8 @@ public class StreamingChunkDownloadTask implements Callable<Void> {
           // Check if link is expired and refresh if needed
           if (chunk.isChunkLinkInvalid()) {
             LOGGER.debug("Link invalid for chunk {}, refetching", chunk.getChunkIndex());
-            ExternalLink freshLink = linkFetcher.refetchLink(chunk.getChunkIndex());
+            ExternalLink freshLink =
+                linkFetcher.refetchLink(chunk.getChunkIndex(), chunk.getRowOffset());
             chunk.setChunkLink(freshLink);
           }
 

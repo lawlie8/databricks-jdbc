@@ -10,6 +10,7 @@ import static com.databricks.jdbc.dbclient.impl.common.CommandConstants.GET_TABL
 import static com.databricks.jdbc.model.core.ColumnInfoTypeName.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -369,17 +370,20 @@ public class DatabricksThriftServiceClientTest {
             .setStatus(new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS))
             .setResults(resultData)
             .setResultSetMetadata(resultMetadataData);
-    when(thriftAccessor.getResultSetResp(any(), any())).thenReturn(response);
+    when(thriftAccessor.fetchResultsWithAbsoluteOffset(any(), anyLong(), any()))
+        .thenReturn(response);
     when(resultData.getResultLinks())
         .thenReturn(
             Collections.singletonList(new TSparkArrowResultLink().setFileLink(TEST_STRING)));
-    Collection<ExternalLink> resultChunks = client.getResultChunks(TEST_STMT_ID, 0);
+    // Pass chunkIndex=0 and rowOffset=0 for the first chunk
+    Collection<ExternalLink> resultChunks =
+        client.getResultChunks(TEST_STMT_ID, 0, 0).getExternalLinks();
     assertEquals(resultChunks.size(), 1);
     assertEquals(resultChunks.stream().findFirst().get().getExternalLink(), TEST_STRING);
   }
 
   @Test
-  void testGetResultChunksThrowsError() throws SQLException {
+  void testGetResultChunksReturnsEmptyWhenNoLinks() throws SQLException {
     DatabricksThriftServiceClient client =
         new DatabricksThriftServiceClient(thriftAccessor, connectionContext);
     TFetchResultsResp response =
@@ -387,10 +391,12 @@ public class DatabricksThriftServiceClientTest {
             .setStatus(new TStatus().setStatusCode(TStatusCode.SUCCESS_STATUS))
             .setResults(resultData)
             .setResultSetMetadata(resultMetadataData);
-    when(thriftAccessor.getResultSetResp(any(), any())).thenReturn(response);
-    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, -1));
-    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 2));
-    assertThrows(DatabricksSQLException.class, () -> client.getResultChunks(TEST_STMT_ID, 1));
+    when(thriftAccessor.fetchResultsWithAbsoluteOffset(any(), anyLong(), any()))
+        .thenReturn(response);
+    when(resultData.getResultLinks()).thenReturn(null);
+    Collection<ExternalLink> resultChunks =
+        client.getResultChunks(TEST_STMT_ID, 0, 0).getExternalLinks();
+    assertEquals(0, resultChunks.size());
   }
 
   @Test

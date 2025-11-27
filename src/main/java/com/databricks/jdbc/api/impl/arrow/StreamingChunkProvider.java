@@ -8,7 +8,6 @@ import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
-import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -67,6 +66,7 @@ public class StreamingChunkProvider implements ChunkProvider {
   private volatile long currentChunkIndex = -1;
   private volatile long highestKnownChunkIndex = -1;
   private volatile long nextLinkFetchIndex = 0;
+  private volatile long nextRowOffsetToFetch = 0;
   private volatile long nextDownloadIndex = 0;
 
   // State flags
@@ -113,7 +113,7 @@ public class StreamingChunkProvider implements ChunkProvider {
       int linkPrefetchWindow,
       int chunkReadyTimeoutSeconds,
       double cloudFetchSpeedThreshold,
-      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks)
+      ChunkLinkFetchResult initialLinks)
       throws DatabricksParsingException {
 
     this.linkFetcher = linkFetcher;
@@ -156,7 +156,7 @@ public class StreamingChunkProvider implements ChunkProvider {
       int maxChunksInMemory,
       int chunkReadyTimeoutSeconds,
       double cloudFetchSpeedThreshold,
-      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks)
+      ChunkLinkFetchResult initialLinks)
       throws DatabricksParsingException {
     this(
         linkFetcher,
@@ -367,9 +367,12 @@ public class StreamingChunkProvider implements ChunkProvider {
     }
 
     LOGGER.debug(
-        "Fetching links starting from index {} for statement {}", nextLinkFetchIndex, statementId);
+        "Fetching links starting from index {}, row offset {} for statement {}",
+        nextLinkFetchIndex,
+        nextRowOffsetToFetch,
+        statementId);
 
-    ChunkLinkFetchResult result = linkFetcher.fetchLinks(nextLinkFetchIndex);
+    ChunkLinkFetchResult result = linkFetcher.fetchLinks(nextLinkFetchIndex, nextRowOffsetToFetch);
 
     if (result.isEndOfStream()) {
       LOGGER.info("End of stream reached for statement {}", statementId);
@@ -382,9 +385,10 @@ public class StreamingChunkProvider implements ChunkProvider {
       createChunkFromLink(linkInfo);
     }
 
-    // Update next fetch position
+    // Update next fetch positions
     if (result.hasMore()) {
       nextLinkFetchIndex = result.getNextFetchIndex();
+      nextRowOffsetToFetch = result.getNextRowOffset();
     } else {
       endOfStreamReached = true;
       LOGGER.info("End of stream reached for statement {} (hasMore=false)", statementId);
@@ -398,32 +402,33 @@ public class StreamingChunkProvider implements ChunkProvider {
    * Processes initial links provided with the result data. This avoids an extra fetch call for
    * links the server already provided.
    *
-   * @param initialLinks The initial links from ResultData, may be null or empty
+   * @param initialLinks The initial links from ResultData, may be null
    */
-  private void processInitialLinks(Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks)
+  private void processInitialLinks(ChunkLinkFetchResult initialLinks)
       throws DatabricksParsingException {
-    if (initialLinks == null || initialLinks.isEmpty()) {
+    if (initialLinks == null || initialLinks.isEndOfStream()) {
       LOGGER.debug("No initial links provided for statement {}", statementId);
       return;
     }
 
-    LOGGER.info("Processing {} initial links for statement {}", initialLinks.size(), statementId);
+    LOGGER.info(
+        "Processing {} initial links for statement {}",
+        initialLinks.getChunkLinks().size(),
+        statementId);
 
-    Long lastNextChunkIndex = null;
-
-    for (ChunkLinkFetchResult.ChunkLinkInfo linkInfo : initialLinks) {
+    for (ChunkLinkFetchResult.ChunkLinkInfo linkInfo : initialLinks.getChunkLinks()) {
       createChunkFromLink(linkInfo);
-      if (linkInfo.getLink() != null) {
-        lastNextChunkIndex = linkInfo.getLink().getNextChunkIndex();
-      }
     }
 
-    // Set next fetch index based on the last link's nextChunkIndex
-    if (lastNextChunkIndex != null) {
-      nextLinkFetchIndex = lastNextChunkIndex;
-      LOGGER.debug("Next link fetch index set to {} from initial links", nextLinkFetchIndex);
+    // Set next fetch positions using unified API
+    if (initialLinks.hasMore()) {
+      nextLinkFetchIndex = initialLinks.getNextFetchIndex();
+      nextRowOffsetToFetch = initialLinks.getNextRowOffset();
+      LOGGER.debug(
+          "Next fetch position set to chunk index {}, row offset {} from initial links",
+          nextLinkFetchIndex,
+          nextRowOffsetToFetch);
     } else {
-      // Last link has null nextChunkIndex - no more chunks
       endOfStreamReached = true;
       LOGGER.info("End of stream reached from initial links for statement {}", statementId);
     }

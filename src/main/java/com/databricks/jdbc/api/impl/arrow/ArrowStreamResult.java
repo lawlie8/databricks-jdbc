@@ -1,5 +1,6 @@
 package com.databricks.jdbc.api.impl.arrow;
 
+import static com.databricks.jdbc.common.util.DatabricksThriftUtil.createExternalLink;
 import static com.databricks.jdbc.common.util.DatabricksThriftUtil.getColumnInfoFromTColumnDesc;
 
 import com.databricks.jdbc.api.impl.ComplexDataTypeParser;
@@ -17,6 +18,7 @@ import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.client.thrift.generated.TColumnDesc;
 import com.databricks.jdbc.model.client.thrift.generated.TFetchResultsResp;
 import com.databricks.jdbc.model.client.thrift.generated.TGetResultSetMetadataResp;
+import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
 import com.databricks.jdbc.model.core.ColumnInfo;
 import com.databricks.jdbc.model.core.ColumnInfoTypeName;
 import com.databricks.jdbc.model.core.ExternalLink;
@@ -111,9 +113,9 @@ public class ArrowStreamResult implements IExecutionResult {
       int chunkReadyTimeoutSeconds = connectionContext.getChunkReadyTimeoutSeconds();
       double cloudFetchSpeedThreshold = connectionContext.getCloudFetchSpeedThreshold();
 
-      // Convert ExternalLinks to ChunkLinkInfo for the provider
-      Collection<ChunkLinkFetchResult.ChunkLinkInfo> initialLinks =
-          convertToChunkLinkInfos(resultData.getExternalLinks());
+      // Convert ExternalLinks to ChunkLinkFetchResult for the provider
+      ChunkLinkFetchResult initialLinks =
+          convertToChunkLinkFetchResult(resultData.getExternalLinks());
 
       return new StreamingChunkProvider(
           linkFetcher,
@@ -163,16 +165,61 @@ public class ArrowStreamResult implements IExecutionResult {
     if (isInlineArrow) {
       this.chunkProvider = new InlineChunkProvider(resultsResp, parentStatement, session);
     } else {
-      CompressionCodec compressionCodec =
-          CompressionCodec.getCompressionMapping(resultsResp.getResultSetMetadata());
       this.chunkProvider =
-          new RemoteChunkProvider(
-              parentStatement,
-              resultsResp,
-              session,
-              httpClient,
-              session.getConnectionContext().getCloudFetchThreadPoolSize(),
-              compressionCodec);
+          createThriftRemoteChunkProvider(resultsResp, parentStatement, session, httpClient);
+    }
+  }
+
+  /**
+   * Creates the appropriate remote chunk provider for Thrift based on configuration.
+   *
+   * @param resultsResp The Thrift fetch results response
+   * @param parentStatement The parent statement for fetching additional chunks
+   * @param session The session for fetching additional chunks
+   * @param httpClient The HTTP client for downloading chunk data
+   * @return A ChunkProvider instance
+   */
+  private static ChunkProvider createThriftRemoteChunkProvider(
+      TFetchResultsResp resultsResp,
+      IDatabricksStatementInternal parentStatement,
+      IDatabricksSession session,
+      IDatabricksHttpClient httpClient)
+      throws DatabricksSQLException {
+
+    IDatabricksConnectionContext connectionContext = session.getConnectionContext();
+    CompressionCodec compressionCodec =
+        CompressionCodec.getCompressionMapping(resultsResp.getResultSetMetadata());
+
+    if (connectionContext.isStreamingChunkProviderEnabled()) {
+      StatementId statementId = parentStatement.getStatementId();
+      LOGGER.info("Using StreamingChunkProvider for Thrift statementId: {}", statementId);
+
+      ChunkLinkFetcher linkFetcher = new ThriftChunkLinkFetcher(session, statementId);
+      int maxChunksInMemory = connectionContext.getCloudFetchThreadPoolSize();
+      int chunkReadyTimeoutSeconds = connectionContext.getChunkReadyTimeoutSeconds();
+      double cloudFetchSpeedThreshold = connectionContext.getCloudFetchSpeedThreshold();
+
+      // Convert initial Thrift links to ChunkLinkFetchResult
+      ChunkLinkFetchResult initialLinks = convertThriftLinksToChunkLinkFetchResult(resultsResp);
+
+      return new StreamingChunkProvider(
+          linkFetcher,
+          httpClient,
+          compressionCodec,
+          statementId,
+          maxChunksInMemory,
+          chunkReadyTimeoutSeconds,
+          cloudFetchSpeedThreshold,
+          initialLinks);
+    } else {
+      // Use the original RemoteChunkProvider
+      return new RemoteChunkProvider(
+          parentStatement,
+          resultsResp,
+          session,
+          httpClient,
+          connectionContext.getCloudFetchThreadPoolSize(),
+          compressionCodec);
     }
   }
 
@@ -323,24 +370,87 @@ public class ArrowStreamResult implements IExecutionResult {
   }
 
   /**
-   * Converts a collection of ExternalLinks to ChunkLinkInfo objects.
+   * Converts a collection of ExternalLinks to a ChunkLinkFetchResult.
    *
    * @param externalLinks The external links to convert, may be null
-   * @return A collection of ChunkLinkInfo objects, or null if input is null
+   * @return A ChunkLinkFetchResult, or null if input is null or empty
    */
-  private static Collection<ChunkLinkFetchResult.ChunkLinkInfo> convertToChunkLinkInfos(
+  private static ChunkLinkFetchResult convertToChunkLinkFetchResult(
       Collection<ExternalLink> externalLinks) {
-    if (externalLinks == null) {
+    if (externalLinks == null || externalLinks.isEmpty()) {
       return null;
     }
-    return externalLinks.stream()
-        .map(
-            link ->
-                new ChunkLinkFetchResult.ChunkLinkInfo(
-                    link.getChunkIndex() != null ? link.getChunkIndex() : 0,
-                    link,
-                    link.getRowCount() != null ? link.getRowCount() : 0,
-                    link.getRowOffset() != null ? link.getRowOffset() : 0))
-        .collect(Collectors.toList());
+
+    List<ExternalLink> linkList =
+        externalLinks instanceof List
+            ? (List<ExternalLink>) externalLinks
+            : new ArrayList<>(externalLinks);
+
+    List<ChunkLinkFetchResult.ChunkLinkInfo> chunkLinks =
+        linkList.stream()
+            .map(
+                link ->
+                    new ChunkLinkFetchResult.ChunkLinkInfo(
+                        link.getChunkIndex(), link, link.getRowCount(), link.getRowOffset()))
+            .collect(Collectors.toList());
+
+    // Derive hasMore and nextRowOffset from last link (SEA style)
+    ExternalLink lastLink = linkList.get(linkList.size() - 1);
+    boolean hasMore = lastLink.getNextChunkIndex() != null;
+    long nextFetchIndex = hasMore ? lastLink.getNextChunkIndex() : -1;
+    long nextRowOffset = lastLink.getRowOffset() + lastLink.getRowCount();
+
+    return ChunkLinkFetchResult.of(chunkLinks, hasMore, nextFetchIndex, nextRowOffset);
+  }
+
+  /**
+   * Converts Thrift result links to a ChunkLinkFetchResult.
+   *
+   * <p>This method converts TSparkArrowResultLink from the Thrift response to the unified
+   * ChunkLinkFetchResult format used by StreamingChunkProvider.
+   *
+   * @param resultsResp The Thrift fetch results response containing initial links
+   * @return A ChunkLinkFetchResult, or null if no links
+   */
+  private static ChunkLinkFetchResult convertThriftLinksToChunkLinkFetchResult(
+      TFetchResultsResp resultsResp) {
+    List<TSparkArrowResultLink> resultLinks = resultsResp.getResults().getResultLinks();
+    if (resultLinks == null || resultLinks.isEmpty()) {
+      return null;
+    }
+
+    List<ChunkLinkFetchResult.ChunkLinkInfo> chunkLinks = new ArrayList<>();
+    int lastIndex = resultLinks.size() - 1;
+    boolean hasMoreRows = resultsResp.hasMoreRows;
+
+    for (int i = 0; i < resultLinks.size(); i++) {
+      TSparkArrowResultLink thriftLink = resultLinks.get(i);
+
+      // Convert Thrift link to ExternalLink
+      ExternalLink externalLink = createExternalLink(thriftLink, i);
+
+      // For the last link, set nextChunkIndex based on hasMoreRows
+      if (i == lastIndex) {
+        if (hasMoreRows) {
+          // More chunks available - next fetch should start from lastIndex + 1
+          externalLink.setNextChunkIndex((long) i + 1);
+        }
+        // If hasMoreRows is false, nextChunkIndex remains null (end of stream)
+      } else {
+        // Not the last link - next chunk follows immediately
+        externalLink.setNextChunkIndex((long) i + 1);
+      }
+
+      chunkLinks.add(
+          new ChunkLinkFetchResult.ChunkLinkInfo(
+              i, externalLink, thriftLink.getRowCount(), thriftLink.getStartRowOffset()));
+    }
+
+    // Calculate next fetch positions from last link
+    TSparkArrowResultLink lastThriftLink = resultLinks.get(lastIndex);
+    long nextFetchIndex = hasMoreRows ? lastIndex + 1 : -1;
+    long nextRowOffset = lastThriftLink.getStartRowOffset() + lastThriftLink.getRowCount();
+
+    return ChunkLinkFetchResult.of(chunkLinks, hasMoreRows, nextFetchIndex, nextRowOffset);
   }
 }

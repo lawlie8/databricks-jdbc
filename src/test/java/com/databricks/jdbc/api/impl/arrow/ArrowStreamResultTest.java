@@ -3,8 +3,7 @@ package com.databricks.jdbc.api.impl.arrow;
 import static com.databricks.jdbc.TestConstants.*;
 import static java.lang.Math.min;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 import com.databricks.jdbc.api.impl.DatabricksConnectionContextFactory;
@@ -24,6 +23,7 @@ import com.databricks.jdbc.model.client.thrift.generated.TSparkArrowResultLink;
 import com.databricks.jdbc.model.core.ColumnInfo;
 import com.databricks.jdbc.model.core.ColumnInfoTypeName;
 import com.databricks.jdbc.model.core.ExternalLink;
+import com.databricks.jdbc.model.core.GetChunksResult;
 import com.databricks.jdbc.model.core.ResultData;
 import com.databricks.jdbc.model.core.ResultManifest;
 import com.databricks.jdbc.model.core.ResultSchema;
@@ -283,8 +283,8 @@ public class ArrowStreamResultTest {
   private void setupResultChunkMocks() throws DatabricksSQLException {
     for (int chunkIndex = 1; chunkIndex < numberOfChunks; chunkIndex++) {
       boolean isLastChunk = (chunkIndex == (numberOfChunks - 1));
-      when(mockedSdkClient.getResultChunks(STATEMENT_ID, chunkIndex))
-          .thenReturn(getChunkLinks(chunkIndex, isLastChunk));
+      when(mockedSdkClient.getResultChunks(eq(STATEMENT_ID), eq((long) chunkIndex), anyLong()))
+          .thenReturn(GetChunksResult.forSea(getChunkLinks(chunkIndex, isLastChunk)));
     }
   }
 

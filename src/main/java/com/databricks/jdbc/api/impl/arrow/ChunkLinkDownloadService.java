@@ -10,6 +10,7 @@ import com.databricks.jdbc.exception.DatabricksValidationException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.core.ExternalLink;
+import com.databricks.jdbc.model.core.GetChunksResult;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
@@ -219,8 +220,11 @@ public class ChunkLinkDownloadService<T extends AbstractArrowResultChunk> {
         CompletableFuture.runAsync(
             () -> {
               try {
-                Collection<ExternalLink> links =
-                    session.getDatabricksClient().getResultChunks(statementId, batchStartIndex);
+                // rowOffset is 0 here as this service is used by RemoteChunkProvider (SEA-only)
+                // which fetches by chunkIndex, not rowOffset
+                GetChunksResult result =
+                    session.getDatabricksClient().getResultChunks(statementId, batchStartIndex, 0);
+                Collection<ExternalLink> links = result.getExternalLinks();
                 LOGGER.info(
                     "Retrieved {} links for batch starting at {} for statement id {}",
                     links.size(),

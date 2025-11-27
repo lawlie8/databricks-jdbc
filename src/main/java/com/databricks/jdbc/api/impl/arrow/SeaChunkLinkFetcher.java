@@ -6,6 +6,7 @@ import com.databricks.jdbc.exception.DatabricksSQLException;
 import com.databricks.jdbc.log.JdbcLogger;
 import com.databricks.jdbc.log.JdbcLoggerFactory;
 import com.databricks.jdbc.model.core.ExternalLink;
+import com.databricks.jdbc.model.core.GetChunksResult;
 import com.databricks.jdbc.model.telemetry.enums.DatabricksDriverErrorCode;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,14 +32,17 @@ public class SeaChunkLinkFetcher implements ChunkLinkFetcher {
   }
 
   @Override
-  public ChunkLinkFetchResult fetchLinks(long startChunkIndex) throws DatabricksSQLException {
+  public ChunkLinkFetchResult fetchLinks(long startChunkIndex, long startRowOffset)
+      throws DatabricksSQLException {
+    // SEA uses startChunkIndex; startRowOffset is ignored
     LOGGER.debug(
         "Fetching links starting from chunk index {} for statement {}",
         startChunkIndex,
         statementId);
 
-    Collection<ExternalLink> links =
-        session.getDatabricksClient().getResultChunks(statementId, startChunkIndex);
+    GetChunksResult result =
+        session.getDatabricksClient().getResultChunks(statementId, startChunkIndex, startRowOffset);
+    Collection<ExternalLink> links = result.getExternalLinks();
 
     if (links == null || links.isEmpty()) {
       LOGGER.debug("No links returned, end of stream reached for statement {}", statementId);
@@ -51,35 +55,35 @@ public class SeaChunkLinkFetcher implements ChunkLinkFetcher {
     for (ExternalLink link : links) {
       chunkLinks.add(
           new ChunkLinkFetchResult.ChunkLinkInfo(
-              link.getChunkIndex(),
-              link,
-              link.getRowCount() != null ? link.getRowCount() : 0,
-              link.getRowOffset() != null ? link.getRowOffset() : 0));
+              link.getChunkIndex(), link, link.getRowCount(), link.getRowOffset()));
 
-      // SEA uses nextChunkIndex to indicate continuation.
-      // The LAST link's nextChunkIndex determines if there are more chunks.
-      // null means no more chunks after this batch.
+      // Track last link's nextChunkIndex for logging
       nextIndex = link.getNextChunkIndex();
     }
 
-    boolean hasMore = (nextIndex != null);
+    // Use hasMoreData and nextRowOffset from GetChunksResult (unified with Thrift)
+    boolean hasMore = result.hasMoreData();
+    long nextRowOffset = result.getNextRowOffset();
 
     LOGGER.debug(
-        "Fetched {} links for statement {}, hasMore={}, nextIndex={}",
+        "Fetched {} links for statement {}, hasMore={}, nextIndex={}, nextRowOffset={}",
         chunkLinks.size(),
         statementId,
         hasMore,
-        nextIndex);
+        nextIndex,
+        nextRowOffset);
 
-    return ChunkLinkFetchResult.of(chunkLinks, hasMore, hasMore ? nextIndex : -1);
+    return ChunkLinkFetchResult.of(chunkLinks, hasMore, hasMore ? nextIndex : -1, nextRowOffset);
   }
 
   @Override
-  public ExternalLink refetchLink(long chunkIndex) throws DatabricksSQLException {
+  public ExternalLink refetchLink(long chunkIndex, long rowOffset) throws DatabricksSQLException {
+    // SEA uses chunkIndex; rowOffset is ignored
     LOGGER.info("Refetching expired link for chunk {} of statement {}", chunkIndex, statementId);
 
-    Collection<ExternalLink> links =
-        session.getDatabricksClient().getResultChunks(statementId, chunkIndex);
+    GetChunksResult result =
+        session.getDatabricksClient().getResultChunks(statementId, chunkIndex, rowOffset);
+    Collection<ExternalLink> links = result.getExternalLinks();
 
     if (links == null || links.isEmpty()) {
       throw new DatabricksSQLException(
@@ -96,14 +100,12 @@ public class SeaChunkLinkFetcher implements ChunkLinkFetcher {
       }
     }
 
-    // If exact match not found, return the first link (server should return the requested chunk)
-    ExternalLink firstLink = links.iterator().next();
-    LOGGER.warn(
-        "Exact chunk index {} not found in response, using first link with index {} for statement {}",
-        chunkIndex,
-        firstLink.getChunkIndex(),
-        statementId);
-    return firstLink;
+    // Exact match not found - this indicates a server bug
+    throw new DatabricksSQLException(
+        String.format(
+            "Failed to refetch link for chunk %d: server returned links but none matched requested index",
+            chunkIndex),
+        DatabricksDriverErrorCode.CHUNK_READY_ERROR);
   }
 
   @Override

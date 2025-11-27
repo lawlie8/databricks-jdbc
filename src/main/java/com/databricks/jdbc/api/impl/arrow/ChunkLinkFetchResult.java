@@ -14,16 +14,18 @@ public class ChunkLinkFetchResult {
   private final List<ChunkLinkInfo> chunkLinks;
   private final boolean hasMore;
   private final long nextFetchIndex;
+  private final long nextRowOffset;
 
   private ChunkLinkFetchResult(
-      List<ChunkLinkInfo> chunkLinks, boolean hasMore, long nextFetchIndex) {
+      List<ChunkLinkInfo> chunkLinks, boolean hasMore, long nextFetchIndex, long nextRowOffset) {
     this.chunkLinks = chunkLinks;
     this.hasMore = hasMore;
     this.nextFetchIndex = nextFetchIndex;
+    this.nextRowOffset = nextRowOffset;
   }
 
   /**
-   * Creates a result with the given links and continuation info.
+   * Creates a result with the given links and continuation info (for SEA).
    *
    * @param links The fetched chunk links
    * @param hasMore Whether more chunks are available
@@ -32,7 +34,21 @@ public class ChunkLinkFetchResult {
    */
   public static ChunkLinkFetchResult of(
       List<ChunkLinkInfo> links, boolean hasMore, long nextFetchIndex) {
-    return new ChunkLinkFetchResult(links, hasMore, nextFetchIndex);
+    return new ChunkLinkFetchResult(links, hasMore, nextFetchIndex, 0);
+  }
+
+  /**
+   * Creates a result with full continuation info (for Thrift).
+   *
+   * @param links The fetched chunk links
+   * @param hasMore Whether more chunks are available
+   * @param nextFetchIndex The next chunk index to fetch from, or -1 if no more
+   * @param nextRowOffset The next row offset for Thrift FETCH_ABSOLUTE
+   * @return A new ChunkLinkFetchResult
+   */
+  public static ChunkLinkFetchResult of(
+      List<ChunkLinkInfo> links, boolean hasMore, long nextFetchIndex, long nextRowOffset) {
+    return new ChunkLinkFetchResult(links, hasMore, nextFetchIndex, nextRowOffset);
   }
 
   /**
@@ -41,7 +57,7 @@ public class ChunkLinkFetchResult {
    * @return A ChunkLinkFetchResult representing end of stream
    */
   public static ChunkLinkFetchResult endOfStream() {
-    return new ChunkLinkFetchResult(Collections.emptyList(), false, -1);
+    return new ChunkLinkFetchResult(Collections.emptyList(), false, -1, 0);
   }
 
   /**
@@ -69,6 +85,15 @@ public class ChunkLinkFetchResult {
    */
   public long getNextFetchIndex() {
     return nextFetchIndex;
+  }
+
+  /**
+   * Returns the next row offset for Thrift FETCH_ABSOLUTE continuation.
+   *
+   * @return The next row offset, or 0 if not applicable
+   */
+  public long getNextRowOffset() {
+    return nextRowOffset;
   }
 
   /**
