@@ -1,5 +1,6 @@
 package com.databricks.jdbc.telemetry;
 
+import static com.databricks.jdbc.common.DatabricksJdbcConstants.QUERY_TAGS;
 import static com.databricks.jdbc.common.util.WildcardUtil.isNullOrEmpty;
 
 import com.databricks.jdbc.api.internal.IDatabricksConnectionContext;
@@ -218,7 +219,8 @@ public class TelemetryHelper {
             .setRowsFetchedPerBlock(connectionContext.getRowsFetchedPerBlock())
             .setAsyncPollIntervalMillis(connectionContext.getAsyncExecPollInterval())
             .setEnableTokenCache(connectionContext.isTokenCacheEnabled())
-            .setHttpPath(connectionContext.getHttpPath());
+            .setHttpPath(connectionContext.getHttpPath())
+            .setQueryTags(connectionContext.getSessionConfigs().get(QUERY_TAGS));
     if (connectionContext.useJWTAssertion()) {
       connectionParameters
           .setEnableJwtAssertion(true)
