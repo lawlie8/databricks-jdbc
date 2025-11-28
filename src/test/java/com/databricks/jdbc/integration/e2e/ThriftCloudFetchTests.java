@@ -33,7 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /** Integration test to test CloudFetch link refetching using Thrift client. */
-public class ThriftCloudFetchIntegrationTests {
+public class ThriftCloudFetchTests {
   /** Connection to the Databricks cluster. */
   private Connection connection;
 
@@ -41,7 +41,7 @@ public class ThriftCloudFetchIntegrationTests {
   private static final String TABLE = "samples.tpch.lineitem";
 
   private static final JdbcLogger LOGGER =
-      JdbcLoggerFactory.getLogger(ThriftCloudFetchIntegrationTests.class);
+      JdbcLoggerFactory.getLogger(ThriftCloudFetchTests.class);
 
   @BeforeEach
   void setUp() throws Exception {
