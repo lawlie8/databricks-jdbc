@@ -402,11 +402,11 @@ final class DatabricksThriftAccessor {
     TFetchResultsResp resultSet = null;
     try {
       response = getOperationStatus(request, statementId);
-      verifySuccessStatus(
-          response.getStatus(), "getStatementResult", statementId.toSQLExecStatementId());
-
       TOperationState operationState = response.getOperationState();
       if (operationState == TOperationState.FINISHED_STATE) {
+        verifySuccessStatus(
+            response.getStatus(), "getStatementResult", statementId.toSQLExecStatementId());
+
         long fetchStartTime = System.nanoTime();
 
         TFetchResultsReq resultsReq = createFetchResultsReqWithDefaults(operationHandle);

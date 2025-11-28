@@ -57,12 +57,6 @@ class ChunkLinkDownloadServiceTest {
     // Mock the response to link requests
     when(mockClient.getResultChunks(eq(mockStatementId), eq(1L), anyLong()))
         .thenReturn(Collections.singletonList(linkForChunkIndex_1));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(2L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_2));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(3L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_3));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(4L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_4));
 
     long chunkIndex = 1L;
     when(mockChunkMap.get(chunkIndex)).thenReturn(mock(ArrowResultChunk.class));
@@ -136,14 +130,12 @@ class ChunkLinkDownloadServiceTest {
     // Mock the response to link requests
     when(mockClient.getResultChunks(eq(mockStatementId), eq(1L), anyLong()))
         .thenReturn(Collections.singletonList(linkForChunkIndex_1));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(2L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_2));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(3L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_3));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(4L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_4));
+    
     // Download chain will be triggered immediately in the constructor
     when(mockSession.getConnectionContext().getClientType()).thenReturn(DatabricksClientType.SEA);
+
+    long chunkIndex = 1L;
+    when(mockChunkMap.get(chunkIndex)).thenReturn(mock(ArrowResultChunk.class));
 
     new ChunkLinkDownloadService<>(
         mockSession, mockStatementId, TOTAL_CHUNKS, mockChunkMap, NEXT_BATCH_START_INDEX);
@@ -166,12 +158,6 @@ class ChunkLinkDownloadServiceTest {
     // Mock the response to link requests. Return the expired link for chunk index 1
     when(mockClient.getResultChunks(eq(mockStatementId), eq(1L), anyLong()))
         .thenReturn(Collections.singletonList(expiredLinkForChunkIndex_1));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(2L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_2));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(3L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_3));
-    when(mockClient.getResultChunks(eq(mockStatementId), eq(4L), anyLong()))
-        .thenReturn(Collections.singletonList(linkForChunkIndex_4));
 
     long chunkIndex = 1L;
     ArrowResultChunk mockChunk = mock(ArrowResultChunk.class);
