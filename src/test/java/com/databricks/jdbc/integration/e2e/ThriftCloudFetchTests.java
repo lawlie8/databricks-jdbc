@@ -40,8 +40,7 @@ public class ThriftCloudFetchTests {
   /** Table with lot of rows to generate multiple CloudFetch chunks. */
   private static final String TABLE = "samples.tpch.lineitem";
 
-  private static final JdbcLogger LOGGER =
-      JdbcLoggerFactory.getLogger(ThriftCloudFetchTests.class);
+  private static final JdbcLogger LOGGER = JdbcLoggerFactory.getLogger(ThriftCloudFetchTests.class);
 
   @BeforeEach
   void setUp() throws Exception {

@@ -130,7 +130,7 @@ class ChunkLinkDownloadServiceTest {
     // Mock the response to link requests
     when(mockClient.getResultChunks(eq(mockStatementId), eq(1L), anyLong()))
         .thenReturn(Collections.singletonList(linkForChunkIndex_1));
-    
+
     // Download chain will be triggered immediately in the constructor
     when(mockSession.getConnectionContext().getClientType()).thenReturn(DatabricksClientType.SEA);
 
