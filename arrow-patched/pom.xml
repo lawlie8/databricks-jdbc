@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.databricks</groupId>
+        <artifactId>databricks-jdbc-parent</artifactId>
+        <version>3.0.5</version>
+    </parent>
+
+    <groupId>org.apache.arrow</groupId>
+    <artifactId>arrow-memory-core</artifactId>
+    <version>${arrow.version}-patched</version>
+    <packaging>jar</packaging>
+    <name>Arrow Memory Core (Patched)</name>
+    <description>
+        Apache Arrow with Databricks specific buffer allocator which does not
+        use reflection.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-core</artifactId>
+            <version>${arrow.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.slf4j</exclude>
+                                </excludes>
+                            </artifactSet>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--      &lt;!&ndash; Step 1: Unpack arrow-memory-core classes &ndash;&gt;-->
+            <!--      <plugin>-->
+            <!--        <groupId>org.apache.maven.plugins</groupId>-->
+            <!--        <artifactId>maven-dependency-plugin</artifactId>-->
+            <!--        <version>3.6.1</version>-->
+            <!--        <executions>-->
+            <!--          <execution>-->
+            <!--            <id>unpack-arrow</id>-->
+            <!--            <phase>generate-sources</phase>-->
+            <!--            <goals>-->
+            <!--              <goal>unpack</goal>-->
+            <!--            </goals>-->
+            <!--            <configuration>-->
+            <!--              <artifactItems>-->
+            <!--                <artifactItem>-->
+            <!--                  <groupId>org.apache.arrow</groupId>-->
+            <!--                  <artifactId>arrow-memory-core</artifactId>-->
+            <!--                  <version>${arrow.version}</version>-->
+            <!--                  <outputDirectory>${project.build.directory}/unpacked-arrow</outputDirectory>-->
+            <!--                </artifactItem>-->
+            <!--              </artifactItems>-->
+            <!--            </configuration>-->
+            <!--          </execution>-->
+            <!--        </executions>-->
+            <!--      </plugin>-->
+
+            <!--      &lt;!&ndash; Step 2: Compile ArrowBufPatcher and Databricks classes &ndash;&gt;-->
+            <!--      <plugin>-->
+            <!--        <groupId>org.apache.maven.plugins</groupId>-->
+            <!--        <artifactId>maven-compiler-plugin</artifactId>-->
+            <!--        <version>3.11.0</version>-->
+            <!--        <configuration>-->
+            <!--          <source>11</source>-->
+            <!--          <target>11</target>-->
+            <!--          &lt;!&ndash; Include unpacked Arrow classes in classpath for compiling Databricks classes &ndash;&gt;-->
+            <!--          <compilerArgs>-->
+            <!--            <arg>-classpath</arg>-->
+            <!--            <arg>${project.build.directory}/unpacked-arrow${path.separator}${maven.compile.classpath}</arg>-->
+            <!--          </compilerArgs>-->
+            <!--        </configuration>-->
+            <!--      </plugin>-->
+
+            <!--      &lt;!&ndash; Step 3: Run ArrowBufPatcher to patch ArrowBuf &ndash;&gt;-->
+            <!--      <plugin>-->
+            <!--        <groupId>org.codehaus.mojo</groupId>-->
+            <!--        <artifactId>exec-maven-plugin</artifactId>-->
+            <!--        <version>3.1.0</version>-->
+            <!--        <executions>-->
+            <!--          <execution>-->
+            <!--            <id>run-patcher</id>-->
+            <!--            <phase>process-classes</phase>-->
+            <!--            <goals>-->
+            <!--              <goal>java</goal>-->
+            <!--            </goals>-->
+            <!--            <configuration>-->
+            <!--              <mainClass>com.databricks.arrow.patch.ArrowBufTransformer</mainClass>-->
+            <!--              <includePluginDependencies>true</includePluginDependencies>-->
+            <!--              <arguments>-->
+            <!--                <argument>${project.build.directory}/unpacked-arrow</argument>-->
+            <!--                <argument>${project.build.directory}/patched-classes</argument>-->
+            <!--              </arguments>-->
+            <!--            </configuration>-->
+            <!--          </execution>-->
+            <!--        </executions>-->
+            <!--        <dependencies>-->
+            <!--          <dependency>-->
+            <!--            <groupId>org.javassist</groupId>-->
+            <!--            <artifactId>javassist</artifactId>-->
+            <!--            <version>${javassist.version}</version>-->
+            <!--          </dependency>-->
+            <!--        </dependencies>-->
+            <!--      </plugin>-->
+
+            <!--      &lt;!&ndash; Step 4: Copy all unpacked arrow classes to final output &ndash;&gt;-->
+            <!--      <plugin>-->
+            <!--        <groupId>org.apache.maven.plugins</groupId>-->
+            <!--        <artifactId>maven-resources-plugin</artifactId>-->
+            <!--        <version>3.3.1</version>-->
+            <!--        <executions>-->
+            <!--          <execution>-->
+            <!--            <id>copy-all-arrow-classes</id>-->
+            <!--            <phase>process-classes</phase>-->
+            <!--            <goals>-->
+            <!--              <goal>copy-resources</goal>-->
+            <!--            </goals>-->
+            <!--            <configuration>-->
+            <!--              <outputDirectory>${project.build.directory}/final-classes</outputDirectory>-->
+            <!--              <resources>-->
+            <!--                <resource>-->
+            <!--                  <directory>${project.build.directory}/unpacked-arrow</directory>-->
+            <!--                </resource>-->
+            <!--              </resources>-->
+            <!--            </configuration>-->
+            <!--          </execution>-->
+            <!--          &lt;!&ndash; Copy patched ArrowBuf to overwrite the original &ndash;&gt;-->
+            <!--          <execution>-->
+            <!--            <id>copy-patched-arrowbuf</id>-->
+            <!--            <phase>prepare-package</phase>-->
+            <!--            <goals>-->
+            <!--              <goal>copy-resources</goal>-->
+            <!--            </goals>-->
+            <!--            <configuration>-->
+            <!--              <outputDirectory>${project.build.directory}/final-classes</outputDirectory>-->
+            <!--              <overwrite>true</overwrite>-->
+            <!--              <resources>-->
+            <!--                <resource>-->
+            <!--                  <directory>${project.build.directory}/patched-classes</directory>-->
+            <!--                </resource>-->
+            <!--              </resources>-->
+            <!--            </configuration>-->
+            <!--          </execution>-->
+            <!--        </executions>-->
+            <!--      </plugin>-->
+
+            <!--      &lt;!&ndash; Step 5: Package arrow classes &ndash;&gt;-->
+            <!--      <plugin>-->
+            <!--        <groupId>org.apache.maven.plugins</groupId>-->
+            <!--        <artifactId>maven-jar-plugin</artifactId>-->
+            <!--        <version>3.3.0</version>-->
+            <!--        <executions>-->
+            <!--          &lt;!&ndash; Default jar (main artifact required by Maven) &ndash;&gt;-->
+            <!--          <execution>-->
+            <!--            <id>default-jar</id>-->
+            <!--            <phase>package</phase>-->
+            <!--            <goals>-->
+            <!--              <goal>jar</goal>-->
+            <!--            </goals>-->
+            <!--            <configuration>-->
+            <!--              <classesDirectory>${project.build.directory}/final-classes</classesDirectory>-->
+            <!--              <excludes>-->
+            <!--                <exclude>com/databricks/**</exclude>-->
+            <!--              </excludes>-->
+            <!--            </configuration>-->
+            <!--          </execution>-->
+            <!--        </executions>-->
+            <!--      </plugin>-->
+        </plugins>
+    </build>
+
+</project>
