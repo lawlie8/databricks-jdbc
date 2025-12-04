@@ -65,7 +65,7 @@ public class ThriftCloudFetchFakeIntegrationTests extends AbstractFakeServiceInt
   /** Test refetching CloudFetch links from various startRowOffsets. */
   @Test
   void testCloudFetchLinksRefetchAtStartRowOffset() throws Exception {
-    final int maxRows = 1_000_000; // Generate many chunk links.
+    final int maxRows = 6_000_000; // Generate many chunk links.
     final String sql = "SELECT * FROM " + TABLE + " LIMIT " + maxRows;
 
     LOGGER.info("Executing sql query: " + sql);
@@ -140,14 +140,6 @@ public class ThriftCloudFetchFakeIntegrationTests extends AbstractFakeServiceInt
 
     // Convert to list for comparison
     List<ExternalLink> refetchedLinksList = new ArrayList<>(refetchedLinks);
-
-    // Verify that refetched links match the original chunks from chunkIndex onwards
-    long totalChunks = chunkProvider.getChunkCount();
-    long expectedLinkCount = totalChunks - chunkIndex;
-    assertEquals(
-        expectedLinkCount,
-        refetchedLinksList.size(),
-        "Refetched links count should match remaining chunks from target index onwards");
 
     // Compare each refetched link with the corresponding original link
     for (int i = 0; i < refetchedLinksList.size(); i++) {

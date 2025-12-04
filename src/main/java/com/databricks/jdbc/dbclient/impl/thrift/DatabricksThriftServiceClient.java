@@ -348,17 +348,6 @@ public class DatabricksThriftServiceClient implements IDatabricksClient, IDatabr
       throw new DatabricksSQLException(error, DatabricksDriverErrorCode.INVALID_STATE);
     }
 
-    // Subsequent fetches fetch from the next set of rows.
-    while (fetchResultsResp.hasMoreRows) {
-      fetchResultsResp = thriftAccessor.getResultSetResp(getOperationHandle(statementId));
-      fetchResultsResp
-          .getResults()
-          .getResultLinks()
-          .forEach(
-              resultLink ->
-                  externalLinks.add(createExternalLink(resultLink, index.getAndIncrement())));
-    }
-
     return externalLinks;
   }
 

@@ -75,7 +75,7 @@ public class ThriftCloudFetchTests {
   @Test
   void testCloudFetchLinksRefetchAtStartRowOffset() throws Exception {
     // Step 1: Execute a query that returns a large dataset with multiple CloudFetch chunks
-    int maxRows = 1_000_000; // Generate many chunk links.
+    int maxRows = 6_000_000; // Generate many chunk links.
     String query = "SELECT * FROM " + TABLE + " LIMIT " + maxRows;
 
     try (Statement stmt = connection.createStatement()) {
@@ -109,8 +109,9 @@ public class ThriftCloudFetchTests {
       IDatabricksSession session = dbConnection.getSession();
       IDatabricksClient client = session.getDatabricksClient();
 
-      List<Long> chunkIndicesToTest =
-          new ArrayList<>(List.of(0L, totalChunks / 2, totalChunks - 1));
+      long end = totalChunks - 1;
+      long mid = totalChunks / 2;
+      List<Long> chunkIndicesToTest = new ArrayList<>(List.of(0L, 1L, mid - 1, mid, mid + 1, end));
       // Randomize the order to make sure there is no sequence to the responses. We use FETCH_NEXT
       // when fetching the next set of links.
       Collections.shuffle(chunkIndicesToTest);
@@ -149,14 +150,6 @@ public class ThriftCloudFetchTests {
 
     // Convert refetched links to a list for comparison
     List<ExternalLink> refetchedLinksList = new ArrayList<>(refetchedLinks);
-
-    // Verify that refetched links match the original chunks from targetChunkIndex onwards
-    long totalChunks = chunkProvider.getChunkCount();
-    long expectedLinkCount = totalChunks - chunkIndex;
-    assertEquals(
-        expectedLinkCount,
-        refetchedLinksList.size(),
-        "Refetched links count should match remaining chunks from target index onwards");
 
     // Compare each refetched link with the corresponding original link.
     for (int i = 0; i < refetchedLinksList.size(); i++) {
