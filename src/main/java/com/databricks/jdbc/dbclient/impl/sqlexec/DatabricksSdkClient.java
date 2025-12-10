@@ -49,6 +49,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.net.ssl.SSLHandshakeException;
+import org.apache.http.HttpStatus;
 
 /** Implementation of IDatabricksClient interface using Databricks Java SDK. */
 public class DatabricksSdkClient implements IDatabricksClient {
@@ -123,6 +124,17 @@ public class DatabricksSdkClient implements IDatabricksClient {
     } catch (DatabricksError e) {
       if (e.getStatusCode() == TEMPORARY_REDIRECT_STATUS_CODE) {
         throw new DatabricksTemporaryRedirectException(TEMPORARY_REDIRECT_EXCEPTION);
+      }
+      if (e.getStatusCode() == HttpStatus.SC_TOO_MANY_REQUESTS) {
+        String errorMessage =
+            String.format(
+                "createSession failed with HTTP %d (rate limit exceeded) after retries. "
+                    + "Warehouse id: %s, Error: %s",
+                HttpStatus.SC_TOO_MANY_REQUESTS,
+                ((Warehouse) warehouse).getWarehouseId(),
+                e.getMessage());
+        LOGGER.warn(errorMessage, e);
+        throw new DatabricksRateLimitException(errorMessage, e, HttpStatus.SC_TOO_MANY_REQUESTS);
       }
       String errorReason = buildErrorMessage(e);
       throw new DatabricksSQLException(errorReason, e, DatabricksDriverErrorCode.CONNECTION_ERROR);

@@ -9,6 +9,7 @@
 ### Updated
 - Added validation for positive integer configuration properties (RowsFetchedPerBlock, BatchInsertSize, etc.) to prevent hangs and errors when set to zero or negative values.
 - Updated Circuit breaker to be triggered by 429 errors too.
+- Added separate circuit breaker to handle 429 from SEA connection creation calls, and fall back to Thrift.
 
 ### Fixed
 
