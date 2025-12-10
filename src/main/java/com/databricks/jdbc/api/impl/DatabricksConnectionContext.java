@@ -1196,4 +1196,14 @@ public class DatabricksConnectionContext implements IDatabricksConnectionContext
   public boolean isTokenFederationEnabled() {
     return getParameter(DatabricksJdbcUrlParams.ENABLE_TOKEN_FEDERATION, "1").equals("1");
   }
+
+  @Override
+  public boolean isStreamingChunkProviderEnabled() {
+    return getParameter(DatabricksJdbcUrlParams.ENABLE_STREAMING_CHUNK_PROVIDER).equals("1");
+  }
+
+  @Override
+  public int getLinkPrefetchWindow() {
+    return Integer.parseInt(getParameter(DatabricksJdbcUrlParams.LINK_PREFETCH_WINDOW));
+  }
 }
