@@ -47,7 +47,7 @@ public class CircuitBreakerIntegrationTests extends AbstractFakeServiceIntegrati
   }
 
   @Test
-  void testthriftwithcircuitopen() throws SQLException {
+  void testThriftWithCircuitOpen() throws SQLException {
     // Open the circuit breaker by recording a 429 failure
     SeaCircuitBreakerManager.record429Failure();
 
@@ -109,7 +109,7 @@ public class CircuitBreakerIntegrationTests extends AbstractFakeServiceIntegrati
   }
 
   @Test
-  void testcircuitremainsopen() throws SQLException {
+  void testCircuitRemainsOpen() throws SQLException {
     // Open circuit breaker
     SeaCircuitBreakerManager.record429Failure();
     assertTrue(SeaCircuitBreakerManager.isCircuitOpen());
@@ -146,7 +146,7 @@ public class CircuitBreakerIntegrationTests extends AbstractFakeServiceIntegrati
   }
 
   @Test
-  void testmultipleconnectionswithcircuitopen() throws SQLException {
+  void testMultipleConnectionsWithCircuitOpen() throws SQLException {
     // Open circuit breaker
     SeaCircuitBreakerManager.record429Failure();
     assertTrue(SeaCircuitBreakerManager.isCircuitOpen());
